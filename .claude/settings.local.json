@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Skill(frontend-design)",
+      "Skill(frontend-design:*)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(curl -s http://localhost:5174)",
+      "Bash(pkill -f vite)",
+      "Bash(cp -r src/pages src/_backup_original/)",
+      "Bash(cp -r src/components src/_backup_original/)",
+      "Bash(cp -r src/data src/_backup_original/)",
+      "Bash(git -C . log --oneline -5)",
+      "Bash(ls -la \"C:\\\\Users\\\\aarif\\\\Downloads\\\\eatclub-portal-a889bbadadea4d05e853f5cff1852e30ea72c195\\\\eatclub-portal-a889bbadadea4d05e853f5cff1852e30ea72c195\")",
+      "Read(//c/Users/aarif/Downloads/eatclub-portal-a889bbadadea4d05e853f5cff1852e30ea72c195/eatclub-portal-a889bbadadea4d05e853f5cff1852e30ea72c195/**)",
+      "Bash(cp -r \"C:\\\\Users\\\\aarif\\\\Downloads\\\\eatclub-portal-a889bbadadea4d05e853f5cff1852e30ea72c195\\\\eatclub-portal-a889bbadadea4d05e853f5cff1852e30ea72c195\\\\src\"/* src/)",
+      "Bash(cp \"C:\\\\Users\\\\aarif\\\\Downloads\\\\eatclub-portal-a889bbadadea4d05e853f5cff1852e30ea72c195\\\\eatclub-portal-a889bbadadea4d05e853f5cff1852e30ea72c195\\\\index.html\" .)",
+      "Bash(cp \"C:\\\\Users\\\\aarif\\\\Downloads\\\\eatclub-portal-a889bbadadea4d05e853f5cff1852e30ea72c195\\\\package.json\" .)",
+      "Bash(ls -la ~/Downloads/eatclub-portal-*/eatclub-portal-*/ 2>/dev/null | head -20)",
+      "Read(//c/Users/aarif/Downloads/**)",
+      "Bash(cp -r ~/Downloads/eatclub-portal-*/eatclub-portal-*/src/* src/)",
+      "Bash(cp ~/Downloads/eatclub-portal-*/eatclub-portal-*/index.html .)",
+      "Bash(cp ~/Downloads/eatclub-portal-*/eatclub-portal-*/package.json .)",
+      "Bash(pkill -f \"vite\\\\|node.*dev\")"
+    ]
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "rules": {
+    "notes": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "leaderboard": {
+      ".read": "auth.uid !== null",
+      "$uid": {
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "chats": {
+      ".read": "auth.uid !== null",
+      ".write": "auth.uid !== null",
+      "$messageId": {
+        ".validate": "newData.hasChildren(['id', 'user', 'text', 'timestamp'])"
+      }
+    },
+    "conversations": {
+      "$conversationId": {
+        ".read": "auth.uid !== null && data.child('metadata/participants').hasChild(auth.uid)",
+        ".write": "auth.uid !== null && (!data.exists() || data.child('metadata/participants').hasChild(auth.uid))",
+        "metadata": {
+          ".read": "auth.uid !== null && root.child('conversations').child($conversationId).child('metadata/participants').hasChild(auth.uid)",
+          ".write": "auth.uid !== null"
+        },
+        "messages": {
+          "$messageId": {
+            ".read": "auth.uid !== null && root.child('conversations').child($conversationId).child('metadata/participants').hasChild(auth.uid)",
+            ".write": "auth.uid !== null && root.child('conversations').child($conversationId).child('metadata/participants').hasChild(auth.uid)"
+          }
+        }
+      }
+    },
+    "presence": {
+      ".read": "auth.uid !== null",
+      "$uid": {
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "typing": {
+      "$conversationId": {
+        "$userId": {
+          ".read": "auth.uid !== null",
+          ".write": "$userId === auth.uid"
+        }
+      }
+    }
+  }
+}
