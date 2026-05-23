@@ -41,6 +41,7 @@ import { signInAnonymously, GoogleAuthProvider, signInWithPopup, signOut, onAuth
 import { pinTeamMessage, listenUserConversations } from './services/messaging';
 import UserAvatar from './components/UserAvatar';
 import { getUserColor, notifyAvatarChange } from './hooks/useAvatar';
+import { playNotificationSound } from './utils/notificationSound';
 
 // ── NOTEPAD COMPONENT (Firebase-synced with Dashboard) ──
 function NotepadPanel({ uid, onClose, onNavigateDashboard }) {
@@ -665,6 +666,8 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadNoticeCount, setUnreadNoticeCount] = useState(0);
+  const notifiedNoticesRef = useRef(new Set());
   const [dmTarget, setDmTarget] = useState(null);
   const [chatTab, setChatTab] = useState('team');
   const [userConversations, setUserConversations] = useState([]);
@@ -672,6 +675,21 @@ export default function App() {
   useEffect(() => {
     if (showChat) setUnreadCount(0);
   }, [showChat]);
+
+  useEffect(() => {
+    if (page === 'notices') {
+      setUnreadNoticeCount(0);
+    }
+  }, [page]);
+
+  useEffect(() => {
+    document.title = 'EatClub CC Training Portal';
+  }, []);
+
+  useEffect(() => {
+    const total = unreadCount + unreadNoticeCount;
+    document.title = total > 0 ? `(${total}) EatClub CC` : 'EatClub CC Training Portal';
+  }, [unreadCount, unreadNoticeCount]);
 
   useEffect(() => {
     const memberId = localStorage.getItem('eatclub_member_id');
@@ -917,7 +935,7 @@ export default function App() {
         const msg = e.data.payload;
         const currentName = localStorage.getItem('eatclub_agent_name') || 'Local User';
         if (msg.timestamp >= sessionStartTime && msg.user !== currentName) {
-          if (!showChatRef.current) addToast({ title: msg.user, text: msg.text });
+          if (!showChatRef.current) { addToast({ title: msg.user, text: msg.text }); playNotificationSound(); }
         }
         setChatMessages(prev => {
           if (prev.find(m => m.id === msg.id)) return prev;
@@ -987,6 +1005,7 @@ export default function App() {
           if (!isOwn && !showChatRef.current) {
             setUnreadCount(prev => prev + 1);
             addToast({ title: lastMsg.user, text: lastMsg.text });
+            playNotificationSound();
           }
         }
         setChatMessages(msgs.slice(-100));
@@ -1011,10 +1030,40 @@ export default function App() {
     // Save refs for sendMessage
     chatClientRef.current = { channel, memberId };
 
+    // --- 3. NOTICE BOARD LIVE LISTENER ---
+    const uid = localStorage.getItem('eatclub_uid') || '';
+    const noticesRef = dbRef(db, 'notices');
+    const unsubscribeNotices = onValue(noticesRef, (snap) => {
+      const data = snap.val();
+      if (!data) { setUnreadNoticeCount(0); return; }
+      const list = Object.entries(data).map(([id, val]) => ({ id, ...val }));
+      let unread = 0;
+      list.forEach((n) => {
+        if (n.active === false) return;
+        const isUnread = !n.readBy || !n.readBy[uid];
+        if (isUnread) {
+          unread++;
+          if (!notifiedNoticesRef.current.has(n.id) && !initialLoad.current) {
+            notifiedNoticesRef.current.add(n.id);
+            const ago = Date.now() - (n.createdAt || 0);
+            if (ago < 5000) {
+              addToast({ title: n.title || 'New Notice', text: (n.body || '').slice(0, 80), type: 'notice' });
+              playNotificationSound();
+            }
+          }
+        }
+      });
+      if (initialLoad.current) {
+        list.forEach((n) => { if (n.active !== false && (!n.readBy || !n.readBy[uid])) notifiedNoticesRef.current.add(n.id); });
+      }
+      setUnreadNoticeCount(unread);
+    }, (err) => console.error("Notice sync error:", err));
+
     return () => {
       channel.close();
       unsubscribePresence();
       unsubscribeChat();
+      unsubscribeNotices();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1276,9 +1325,9 @@ export default function App() {
       {/* ══════ NOTIFICATION TOASTS — Premium ══════ */}
       <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {toasts.map(t => (
-          <div key={t.id} className="toast-notification" onClick={() => setShowChat(true)}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(var(--md-primary-rgb), 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <span className="material-symbols-outlined" style={{ color: 'var(--md-primary)', fontSize: 18 }}>chat</span>
+          <div key={t.id} className="toast-notification" onClick={() => t.type === 'notice' ? navigate('notices') : setShowChat(true)}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: t.type === 'notice' ? 'rgba(255,152,0,0.15)' : 'rgba(var(--md-primary-rgb), 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span className="material-symbols-outlined" style={{ color: t.type === 'notice' ? '#FF9800' : 'var(--md-primary)', fontSize: 18 }}>{t.type === 'notice' ? 'campaign' : 'chat'}</span>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 800, fontSize: '0.82rem', color: 'var(--md-on-surface)' }}>{t.title}</div>
@@ -1387,6 +1436,11 @@ export default function App() {
                 >
                   <span className="nav-icon material-symbols-outlined">{item.icon}</span>
                   <span className="nav-label">{item.label}</span>
+                  {item.id === 'notices' && unreadNoticeCount > 0 && (
+                    <span className="online-count-badge" style={{ background: 'linear-gradient(135deg, #FF9800, #E65100)', position: 'absolute', top: 4, right: 4, fontSize: 9, minWidth: 16, height: 16, lineHeight: '16px' }}>
+                      {unreadNoticeCount > 9 ? '9+' : unreadNoticeCount}
+                    </span>
+                  )}
                 </button>
               );
             }
