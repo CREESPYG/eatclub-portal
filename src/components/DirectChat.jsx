@@ -7,14 +7,8 @@ import {
   listenConversationMeta, markConversationRead,
   setTypingIndicator, listenTyping, clearAllTyping,
 } from '../services/messaging';
-
-const getUserColor = (name) => {
-  if (!name) return 'var(--md-primary)';
-  const colors = ['#FF5722','#E91E63','#9C27B0','#673AB7','#3F51B5','#2196F3','#03A9F4','#00BCD4','#009688','#4CAF50','#8BC34A','#CDDC39','#FFC107','#FF9800','#795548'];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
-};
+import UserAvatar from './UserAvatar';
+import { getUserColor } from '../hooks/useAvatar';
 
 export default function DirectChat({ otherUser, myId, myName, myRole, myPhotoURL, onBack, onUnreadChange }) {
   const [messages, setMessages] = useState([]);
@@ -122,19 +116,14 @@ export default function DirectChat({ otherUser, myId, myName, myRole, myPhotoURL
           style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: 'var(--md-surface)', color: 'var(--md-on-surface)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
         </button>
-        <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, position: 'relative', background: `linear-gradient(135deg, ${getUserColor(otherUser.name)}, ${getUserColor(otherUser.name)}88)` }}>
-          {otherUser.photoURL ? (
-            <img src={otherUser.photoURL} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: '#fff' }}>
-              {(otherUser.name || '?').charAt(0).toUpperCase()}
-            </div>
-          )}
-          <div style={{
-            position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, borderRadius: '50%',
-            background: online ? '#4CAF50' : 'var(--md-on-surface-dim)', border: '2px solid var(--md-surface-variant)',
-          }} />
-        </div>
+        <UserAvatar
+          size={32}
+          name={otherUser.name}
+          photoURL={otherUser.photoURL}
+          showStatus
+          status={online ? 'online' : 'offline'}
+          statusColor={online ? '#4CAF50' : undefined}
+        />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--md-on-surface)' }}>{otherUser.name}</div>
           <div style={{ fontSize: 10, color: 'var(--md-on-surface-var)', display: 'flex', alignItems: 'center', gap: 4 }}>

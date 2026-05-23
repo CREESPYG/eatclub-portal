@@ -7,15 +7,19 @@
       }
     },
     "users": {
+      ".read": "auth.uid !== null",
       "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
+        ".write": "auth.uid !== null && ($uid === auth.uid || !data.child('email').exists() || data.child('email').val() !== 'pooja8.box8@gmail.com')",
+        "role": {
+          ".write": "auth.uid !== null && ($uid === auth.uid || !root.child('users').child($uid).child('email').exists() || root.child('users').child($uid).child('email').val() !== 'pooja8.box8@gmail.com')",
+          ".validate": "($uid !== auth.uid) || (newData.val() !== 'Admin' && newData.val() !== 'Super Admin')"
+        }
       }
     },
     "leaderboard": {
       ".read": "auth.uid !== null",
       "$uid": {
-        ".write": "$uid === auth.uid"
+        ".write": "$uid === auth.uid || (newData.exists() && root.child('users').child($uid).child('email').val() !== 'pooja8.box8@gmail.com')"
       }
     },
     "chats": {
@@ -54,6 +58,28 @@
           ".write": "$userId === auth.uid"
         }
       }
+    },
+    "notices": {
+      ".read": "auth.uid !== null",
+      "$noticeId": {
+        ".write": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() !== ''",
+        ".validate": "newData.hasChildren(['title', 'createdAt'])",
+        "readBy": {
+          "$uid": {
+            ".write": "$uid === auth.uid"
+          }
+        }
+      }
+    },
+    "noticeAudit": {
+      "$noticeId": {
+        ".read": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() !== ''",
+        ".write": "auth.uid !== null && root.child('users').child(auth.uid).child('role').val() !== ''"
+      }
+    },
+    "noticeBoardConfig": {
+      ".read": "auth.uid !== null",
+      ".write": "auth.uid !== null && root.child('users').child(auth.uid).child('email').val() === 'pooja8.box8@gmail.com'"
     }
   }
 }

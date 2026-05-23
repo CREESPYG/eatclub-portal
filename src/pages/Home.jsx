@@ -24,7 +24,7 @@ const Section = ({ icon, title, badge, children, ...rest }) => (
       {badge && (
         <span style={{
           fontSize: 11, fontWeight: 800, padding: '4px 12px', borderRadius: 20,
-          background: `linear-gradient(135deg,rgba(${S.Prgb},.08),rgba(${S.Prgb},.04))`,
+          background: 'var(--md-surface-variant)',
           color: S.P,
           border: `1px solid rgba(${S.Prgb},.15)`,
           letterSpacing: .3,
@@ -198,7 +198,7 @@ export default function Home({ navigate }) {
         .m-divider { height:3px;background:linear-gradient(90deg,transparent,rgba(${S.Prgb},.2),${S.P},rgba(${S.Prgb},.2),transparent);margin:0 14px 28px;border-radius:4px;box-shadow:0 0 12px rgba(${S.Prgb},.08) }
         .m-stat { background:${S.SV};border-radius:16px;padding:18px 14px;text-align:center;border:1px solid ${S.Out};position:relative;overflow:hidden;transition:all .3s cubic-bezier(.34,1.56,.64,1) }
         .m-stat:hover { transform:translateY(-3px);border-color:${S.P};box-shadow:0 10px 24px rgba(${S.Prgb},.1) }
-        .m-stat::after { content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,${S.P},#FF8F00);transform:scaleX(0);transition:transform .3s ease;border-radius:0 0 16px 16px }
+        .m-stat::after { content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:${S.P};transform:scaleX(0);transition:transform .3s ease;border-radius:0 0 16px 16px }
         .m-stat:hover::after { transform:scaleX(1) }
         .m-usp { display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:14px;background:${S.SV};border:1px solid ${S.Out};transition:all .25s cubic-bezier(.34,1.56,.64,1);cursor:default }
         .m-usp:hover { transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.1) }
@@ -210,15 +210,15 @@ export default function Home({ navigate }) {
         .m-mod:hover { transform:perspective(800px) rotateY(-4deg) rotateX(2deg) scale(1.02) translateY(-6px);box-shadow:0 20px 50px rgba(0,0,0,.2),0 0 0 1px var(--mc);border-color:var(--mc) }
         .m-mod::before { content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--mc);transform:scaleX(0);transition:transform .3s ease;transform-origin:left }
         .m-mod:hover::before { transform:scaleX(1) }
-        .m-mod::after { content:'';position:absolute;inset:0;background:radial-gradient(350px circle at var(--mx,50%) var(--my,50%),rgba(${S.Prgb},.08),transparent 45%);pointer-events:none;opacity:0;transition:opacity .35s }
+        .m-mod::after { content:'';position:absolute;inset:0;background:${S.SV};pointer-events:none;opacity:0;transition:opacity .35s }
         .m-mod:hover::after { opacity:1 }
         .m-mod:hover .m-mod-inner { transform:perspective(800px) rotateY(4deg) rotateX(-2deg) }
         .m-mod-scroll { scroll-behavior:smooth; -ms-overflow-style:none; scrollbar-width:thin }
         .m-link { display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;border:1px solid ${S.Out};background:${S.SV};text-decoration:none;transition:all .25s cubic-bezier(.34,1.56,.64,1) }
         .m-link:hover { transform:translateY(-2px);border-color:${S.P};box-shadow:0 6px 16px rgba(${S.Prgb},.06) }
         .m-vid-play:hover { transform:scale(1.15)!important }
-        .m-upd { border-radius:24px;padding:32px;position:relative;overflow:hidden;border:2px solid rgba(${S.Prgb},.2);margin-bottom:0;animation:mb 4s ease-in-out infinite;background:linear-gradient(135deg,rgba(${S.Prgb},.06),rgba(${S.Prgb},.01)) }
-        .m-upd::before { content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 25% 50%,rgba(${S.Prgb},.04),transparent 60%);pointer-events:none }
+        .m-upd { border-radius:24px;padding:32px;position:relative;overflow:hidden;border:2px solid rgba(${S.Prgb},.2);margin-bottom:0;animation:mb 4s ease-in-out infinite;background:var(--md-surface-variant) }
+        .m-upd::before { content:'';position:absolute;inset:0;background:var(--md-surface);pointer-events:none;opacity:.3 }
         .m-aud { background:${S.S};border:1px solid ${S.Out};border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:14px;transition:all .3s cubic-bezier(.34,1.56,.64,1) }
         .m-aud:hover { transform:translateY(-3px);border-color:${S.P};box-shadow:0 12px 36px rgba(${S.Prgb},.08) }
         .m-kml { border-radius:18px;overflow:hidden;border:1px solid rgba(${S.Prgb},.15);transition:all .25s ease;margin-bottom:0 }
@@ -308,9 +308,7 @@ export default function Home({ navigate }) {
               </div>
               <div style={{
                 fontSize: 28, fontWeight: 800,
-                background: `linear-gradient(135deg,${color},${color}88)`,
-                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text', lineHeight: 1,
+                color: color, lineHeight: 1,
               }}>{num}</div>
               <div style={{ fontSize: 11, color: S.OnSV, marginTop: 5, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase' }}>{label}</div>
             </div>
@@ -381,7 +379,7 @@ export default function Home({ navigate }) {
               {m.isNew && (
                 <div style={{
                   position: 'absolute', top: -1, right: 14,
-                  background: 'linear-gradient(135deg,var(--md-primary),#FF8F00)',
+                  background: 'var(--md-primary)',
                   color: '#fff', fontSize: 8, fontWeight: 800,
                   padding: '2px 9px', borderRadius: '0 0 8px 8px',
                   letterSpacing: .7, zIndex: 3,
@@ -509,7 +507,7 @@ export default function Home({ navigate }) {
                   onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; e.currentTarget.style.borderColor = 'var(--md-outline)' }}>
                   <div style={{
                     position: 'relative', width: '100%', paddingTop: '56%',
-                    background: `linear-gradient(135deg, rgba(${S.Prgb},.15), rgba(${S.Prgb},.05))`,
+                    background: `var(--md-surface-variant)`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
                     <div style={{
@@ -518,7 +516,7 @@ export default function Home({ navigate }) {
                     }}>
                       <div style={{
                         width: 50, height: 50, borderRadius: '50%',
-                        background: `linear-gradient(135deg, ${S.P}, #FF8F00)`,
+                        background: 'var(--md-primary)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         boxShadow: '0 4px 16px rgba(0,0,0,.3)',
                         transition: 'transform .3s ease',
@@ -607,7 +605,7 @@ export default function Home({ navigate }) {
               <h2 style={{ fontSize: 22, fontWeight: 900, color: S.P, margin: 0, letterSpacing: -.3 }}>CC IMPORTANT UPDATES</h2>
               <p style={{ fontSize: 12, opacity: .8, margin: '2px 0 0', fontWeight: 600, color: S.OnS }}>Live Feed & Essential Processing Sheets</p>
             </div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 20, background: 'linear-gradient(135deg,var(--md-primary),#FF8F00)', color: '#fff', fontSize: 9, fontWeight: 800, letterSpacing: .6 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 20, background: 'var(--md-primary)', color: '#fff', fontSize: 9, fontWeight: 800, letterSpacing: .6 }}>
               <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#4CAF50', animation: 'mp 1.5s ease-in-out infinite', display: 'inline-block' }} />
               LIVE
             </div>
@@ -689,8 +687,8 @@ export default function Home({ navigate }) {
       ═══════════════════════════════════════════════ */}
       <Section id="audit" icon="analytics" title="Audit UI for Box8" badge="3 dashboards">
         <div style={{
-          background: 'linear-gradient(135deg,rgba(var(--md-primary-rgb),.05),rgba(var(--md-primary-rgb),.01))',
-          borderRadius: 22, padding: 28, border: '1px solid rgba(var(--md-primary-rgb),.12)',
+          background: 'var(--md-surface-variant)',
+          borderRadius: 22, padding: 28, border: '1px solid var(--md-outline)',
           position: 'relative', overflow: 'hidden',
         }}>
           <p style={{ fontSize: 12, color: S.OnS, opacity: .75, marginBottom: 20, lineHeight: 1.5, maxWidth: 500 }}>
@@ -702,7 +700,7 @@ export default function Home({ navigate }) {
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   <div style={{
                     width: 46, height: 46, borderRadius: 12,
-                    background: 'linear-gradient(135deg,var(--md-primary),#FF8F00)',
+                    background: 'var(--md-primary)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     boxShadow: '0 4px 14px rgba(var(--md-primary-rgb),.18)',
                   }}>

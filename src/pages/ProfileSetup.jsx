@@ -1,13 +1,8 @@
 import { useState } from 'react';
 import { db } from '../firebase';
 import { ref as dbRef, update } from 'firebase/database';
-
-const ROLE_OPTIONS = [
-  'Chat Executive', 'Senior Chat Executive', 'Email Support Agent', 'Call Support Agent',
-  'Team Lead', 'Quality Analyst', 'Operations Manager', 'Trainer',
-  'Admin', 'Super Admin', 'Developer',
-  'Customer Support Specialist', 'Escalation Specialist', 'Custom',
-];
+import { SIGNUP_ROLES, isRestrictedRole } from '../config/roles';
+import { notifyAvatarChange } from '../hooks/useAvatar';
 
 export default function ProfileSetup({ user, onComplete, onSkip }) {
   const [bio, setBio] = useState('');
@@ -17,13 +12,21 @@ export default function ProfileSetup({ user, onComplete, onSkip }) {
     try { return JSON.parse(localStorage.getItem('eatclub_avatar')) || {}; } catch { return {}; }
   });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const AVATAR_EMOJIS = ['🎮','👨‍💻','👩‍💻','😎','🚀','🌟','💪','🎯','🔥','💎','🧠','🌈'];
 
   const handleSave = async () => {
     const uid = user?.uid;
     if (!uid) return;
+
+    if (isRestrictedRole(role)) {
+      setError('Admin and Super Admin roles cannot be self-assigned. Contact your administrator.');
+      return;
+    }
+
     setSaving(true);
+    setError('');
     try {
       await update(dbRef(db, `users/${uid}`), { bio, role, setupComplete: true });
       localStorage.setItem('eatclub_bio', bio);
@@ -100,6 +103,7 @@ export default function ProfileSetup({ user, onComplete, onSkip }) {
             onChange={e => setBio(e.target.value)}
             placeholder="Tell your team a bit about yourself..."
             rows={3}
+            aria-label="Bio"
             style={{
               width: '100%', padding: '12px 14px', borderRadius: 12,
               background: 'var(--md-surface-variant)',
@@ -115,32 +119,40 @@ export default function ProfileSetup({ user, onComplete, onSkip }) {
 
         {/* Role */}
         <div style={{ marginBottom: 24 }}>
-          <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--md-on-surface-var)', marginBottom: 6, display: 'block', letterSpacing: .5 }}>
+          <label
+            htmlFor="profile-setup-role"
+            style={{ fontSize: 11, fontWeight: 700, color: 'var(--md-on-surface-var)', marginBottom: 6, display: 'block', letterSpacing: .5 }}
+          >
             Role / Position
           </label>
           <select
-            value={ROLE_OPTIONS.includes(role) ? role : 'Custom'}
+            id="profile-setup-role"
+            value={SIGNUP_ROLES.includes(role) ? role : 'Custom'}
             onChange={e => {
               const v = e.target.value;
+              setError('');
               if (v === 'Custom') { setShowCustomRole(true); setRole(''); }
               else { setShowCustomRole(false); setRole(v); }
             }}
+            aria-describedby={error ? 'role-error' : undefined}
+            aria-invalid={!!error}
             style={{
               width: '100%', padding: '12px 14px', borderRadius: 12,
               background: 'var(--md-surface-variant)',
-              border: '1px solid var(--md-outline)',
+              border: error ? '1px solid #E91E63' : '1px solid var(--md-outline)',
               color: 'var(--md-on-surface)', fontSize: 13,
               cursor: 'pointer', appearance: 'auto',
             }}
           >
             <option value="" disabled>Select your role</option>
-            {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+            {SIGNUP_ROLES.map(r => r !== 'Custom' && <option key={r} value={r}>{r}</option>)}
           </select>
           {showCustomRole && (
             <input
               value={role}
-              onChange={e => setRole(e.target.value)}
+              onChange={e => { setRole(e.target.value); setError(''); }}
               placeholder="Enter your custom role..."
+              aria-label="Custom role"
               style={{
                 width: '100%', padding: '12px 14px', borderRadius: 12,
                 background: 'var(--md-surface-variant)',
@@ -151,6 +163,12 @@ export default function ProfileSetup({ user, onComplete, onSkip }) {
               onBlur={e => e.target.style.borderColor = 'var(--md-outline)'}
               autoFocus
             />
+          )}
+          {error && (
+            <div id="role-error" role="alert" style={{ fontSize: 11, color: '#E91E63', marginTop: 6, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>error</span>
+              {error}
+            </div>
           )}
         </div>
 
@@ -183,6 +201,7 @@ export default function ProfileSetup({ user, onComplete, onSkip }) {
               <button key={emoji} type="button" onClick={() => {
                 setAvatarChoice({ type: 'emoji', value: emoji });
                 localStorage.setItem('eatclub_avatar', JSON.stringify({ type: 'emoji', value: emoji }));
+                notifyAvatarChange();
               }}
                 style={{
                   width: 36, height: 36, borderRadius: '50%', border: avatarChoice.value === emoji ? '2px solid var(--md-primary)' : '1px solid var(--md-outline)',
@@ -195,6 +214,7 @@ export default function ProfileSetup({ user, onComplete, onSkip }) {
             <button type="button" onClick={() => {
               setAvatarChoice({ type: 'letter' });
               localStorage.setItem('eatclub_avatar', JSON.stringify({ type: 'letter' }));
+              notifyAvatarChange();
             }}
               style={{
                 width: 36, height: 36, borderRadius: '50%', border: avatarChoice.type === 'letter' ? '2px solid var(--md-primary)' : '1px solid var(--md-outline)',
@@ -208,6 +228,7 @@ export default function ProfileSetup({ user, onComplete, onSkip }) {
               <button type="button" onClick={() => {
                 setAvatarChoice({ type: 'google' });
                 localStorage.setItem('eatclub_avatar', JSON.stringify({ type: 'google' }));
+                notifyAvatarChange();
               }}
                 style={{
                   width: 36, height: 36, borderRadius: '50%', border: avatarChoice.type === 'google' ? '2px solid var(--md-primary)' : '1px solid var(--md-outline)',

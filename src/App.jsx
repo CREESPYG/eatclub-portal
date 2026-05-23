@@ -6,6 +6,7 @@ import Clock from './components/Clock';
 import YTMusicPlayer from './components/YTMusicPlayer';
 import DynamicTitle from './components/DynamicTitle';
 import WelcomeAnimation from './components/WelcomeAnimation';
+import EntryPage from './components/EntryPage';
 import Home from './pages/Home';
 import About from './pages/About';
 import ChatKPIs from './pages/ChatKPIs';
@@ -30,11 +31,16 @@ import CCTemplates from './pages/CCTemplates';
 import UserDashboard from './pages/UserDashboard';
 import ProfileSetup from './pages/ProfileSetup';
 import DirectChat from './components/DirectChat';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import NoticeBoardPage from './pages/NoticeBoard';
 
 import { db, auth } from './firebase';
+import { MAIN_ADMIN_EMAIL, isAdminRole } from './config/roles';
 import { ref as dbRef, set, push, onValue, onDisconnect, serverTimestamp, remove, update } from 'firebase/database';
 import { signInAnonymously, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import { pinTeamMessage, listenUserConversations } from './services/messaging';
+import UserAvatar from './components/UserAvatar';
+import { getUserColor, notifyAvatarChange } from './hooks/useAvatar';
 
 // ── NOTEPAD COMPONENT (Firebase-synced with Dashboard) ──
 function NotepadPanel({ uid, onClose, onNavigateDashboard }) {
@@ -140,6 +146,14 @@ function NotepadPanel({ uid, onClose, onNavigateDashboard }) {
 
   const stripHtml = (html) => html ? html.replace(/<[^>]*>/g, '') : '';
 
+  const noteTextColor = (bg) => {
+    if (!bg) return 'var(--md-on-surface)';
+    const hex = bg.replace('#', '');
+    const r = parseInt(hex.substring(0,2), 16), g = parseInt(hex.substring(2,4), 16), b = parseInt(hex.substring(4,6), 16);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return lum > 0.55 ? '#1a1a1a' : '#f1f3f4';
+  };
+
   return (
     <>
     <div style={{
@@ -218,16 +232,19 @@ function NotepadPanel({ uid, onClose, onNavigateDashboard }) {
             No notes yet. Type above to create one!
           </div>
         ) : (
-          notes.map(note => (
-            <div key={note.id} style={{ marginBottom: 8, borderRadius: 12, overflow: 'hidden', border: viewingNote?.id === note.id ? `2px solid var(--md-primary)` : `1px solid var(--md-outline)`, background: note.color || NOTE_COLORS[0], transition: 'border 0.2s' }}>
+          notes.map(note => {
+            const tc = noteTextColor(note.color || NOTE_COLORS[0]);
+            return (
+            <div key={note.id} style={{ marginBottom: 8, borderRadius: 12, overflow: 'hidden', border: viewingNote?.id === note.id ? `2px solid ${tc}` : `1px solid var(--md-outline)`, background: note.color || NOTE_COLORS[0], transition: 'border 0.2s, box-shadow 0.2s', boxShadow: viewingNote?.id === note.id ? `0 0 0 1px ${tc}` : 'none' }}>
               <div onClick={() => openNote(note)}
                 style={{ padding: '10px 12px', cursor: 'pointer', minHeight: 44, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: '#1A1A1A', marginBottom: 2, lineHeight: 1.3 }}>{note.title || 'Untitled'}</div>
-                {note.content && <div style={{ fontSize: 10, color: '#444', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stripHtml(note.content).substring(0, 80)}</div>}
-                <div style={{ fontSize: 9, color: '#666', marginTop: 3 }}>{formatTime(note.updatedAt)}</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: tc, marginBottom: 2, lineHeight: 1.3 }}>{note.title || 'Untitled'}</div>
+                {note.content && <div style={{ fontSize: 10, color: tc, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>{stripHtml(note.content).substring(0, 80)}</div>}
+                <div style={{ fontSize: 9, color: tc, marginTop: 3, opacity: 0.5 }}>{formatTime(note.updatedAt)}</div>
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -242,24 +259,24 @@ function NotepadPanel({ uid, onClose, onNavigateDashboard }) {
       </div>
     </div>
 
-    {/* Note Viewer Popup — positioned to the left of the Notepad dropdown, below topbar */}
+    {/* Note Viewer Popup */}
     {viewingNote && (
-      <div style={{ position: 'absolute', top: 58, right: 395, width: '320px', maxHeight: '70vh', zIndex: 100, display: 'flex', flexDirection: 'column', background: viewMode === 'edit' ? 'var(--md-surface)' : (viewingNote.color || NOTE_COLORS[0]), borderRadius: 18, boxShadow: '0 25px 80px rgba(0,0,0,0.35)', animation: 'chatPanelIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)', overflow: 'hidden' }}
+      <div style={{ position: 'absolute', top: 58, right: 395, width: '320px', maxHeight: '70vh', zIndex: 100, display: 'flex', flexDirection: 'column', background: viewMode === 'edit' ? 'var(--md-surface)' : (viewingNote.color || NOTE_COLORS[0]), borderRadius: 18, boxShadow: '0 25px 80px rgba(0,0,0,0.35)', animation: 'chatPanelIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)', overflow: 'hidden', color: viewMode === 'view' ? noteTextColor(viewingNote.color || NOTE_COLORS[0]) : 'inherit' }}
         onClick={e => e.stopPropagation()}>
 
           {/* Minimal Header */}
           <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(0,0,0,0.5)' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'inherit', opacity: 0.6 }}>
               {viewMode === 'edit' ? 'Edit Note' : 'Preview'}
             </span>
             <div style={{ display: 'flex', gap: 6 }}>
               {viewMode === 'view' ? (
-                <button onClick={switchToEdit} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(0,0,0,0.08)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Edit Note">
-                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#1a1a1a' }}>edit</span>
+                <button onClick={switchToEdit} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(0,0,0,0.08)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'inherit' }} title="Edit Note">
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
                 </button>
               ) : null}
-              <button onClick={closeView} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(0,0,0,0.08)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Close">
-                <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#1a1a1a' }}>close</span>
+              <button onClick={closeView} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(0,0,0,0.08)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'inherit' }} title="Close">
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
               </button>
             </div>
           </div>
@@ -277,7 +294,7 @@ function NotepadPanel({ uid, onClose, onNavigateDashboard }) {
                 <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
                   {NOTE_COLORS.map(c => (
                     <div key={c} onClick={() => { setEditColor(c); if (viewingNote) saveNote(viewingNote.id, { title: editTitle, content: editContent, color: c }); }}
-                      style={{ width: 24, height: 24, borderRadius: '50%', background: c, cursor: 'pointer', border: c === editColor ? '2px solid var(--md-primary)' : '1px solid var(--md-outline)' }} />
+                      style={{ width: 24, height: 24, borderRadius: '50%', background: c, cursor: 'pointer', border: c === editColor ? `2px solid ${noteTextColor(c)}` : '1px solid var(--md-outline)', boxShadow: c === editColor ? `0 0 0 2px ${c}` : 'none', transition: 'all .15s' }} />
                   ))}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
@@ -293,11 +310,11 @@ function NotepadPanel({ uid, onClose, onNavigateDashboard }) {
               </div>
             ) : (
               <div>
-                {viewingNote.title && <div style={{ fontSize: 18, fontWeight: 900, color: '#1a1a1a', marginBottom: 12 }}>{viewingNote.title}</div>}
+                {viewingNote.title && <div style={{ fontSize: 18, fontWeight: 900, color: 'inherit', marginBottom: 12 }}>{viewingNote.title}</div>}
                 {viewingNote.content ? (
-                  <div style={{ fontSize: 14, lineHeight: 1.6, color: '#1a1a1a' }} dangerouslySetInnerHTML={{ __html: viewingNote.content }} />
+                  <div style={{ fontSize: 14, lineHeight: 1.6, color: 'inherit' }} dangerouslySetInnerHTML={{ __html: viewingNote.content }} />
                 ) : (
-                  <div style={{ fontSize: 13, color: 'rgba(0,0,0,0.4)', fontStyle: 'italic' }}>No content</div>
+                  <div style={{ fontSize: 13, color: 'inherit', opacity: 0.4, fontStyle: 'italic' }}>No content</div>
                 )}
               </div>
             )}
@@ -320,6 +337,18 @@ const NAV_GROUPS = [
     id: 'dashboard',
     icon: 'dashboard',
     label: 'Dashboard',
+    type: 'single',
+  },
+  {
+    id: 'notices',
+    icon: 'campaign',
+    label: 'Notice Board',
+    type: 'single',
+  },
+  {
+    id: 'admin',
+    icon: 'shield',
+    label: 'Admin',
     type: 'single',
   },
   {
@@ -395,6 +424,8 @@ const NAV_GROUPS = [
 
 const PAGE_TITLES = {
   'dashboard': 'Dashboard',
+  'notices': 'Notice Board',
+  'admin': 'Admin Dashboard',
   'home': 'Home',
   'about': 'About EatClub',
   'chat-kpis': 'Chat KPIs',
@@ -420,7 +451,7 @@ const PAGE_TITLES = {
 };
 
 const PAGE_ICONS = {
-  'dashboard': 'dashboard', 'home': 'home', 'about': 'info', 'chat-kpis': 'bar_chart', 'chat-flows': 'account_tree',
+  'dashboard': 'dashboard', 'notices': 'campaign', 'admin': 'shield', 'home': 'home', 'about': 'info', 'chat-kpis': 'bar_chart', 'chat-flows': 'account_tree',
   'hash-library': 'tag', 'agent-guide': 'smart_toy', 'call-kpis': 'call',
   'call-scripts': 'assignment', 'cc-templates': 'content_copy', 'box8': 'lunch_dining',
   'mojo': 'local_pizza', 'tags': 'label', 'resolution': 'bolt', 'ratings': 'star',
@@ -431,6 +462,8 @@ const PAGE_ICONS = {
 
 function renderPage(page, navigate, user, userProfile, onUpdateProfile, onLogout, xp, streak, completedModules) {
   switch (page) {
+    case 'admin': return <AdminDashboard user={user} />;
+    case 'notices': return <NoticeBoardPage user={user} />;
     case 'dashboard': return <UserDashboard user={user} userProfile={userProfile} onUpdateProfile={onUpdateProfile} onLogout={onLogout} xp={xp} streak={streak} completedModules={completedModules} />;
     case 'home': return <Home navigate={navigate} />;
     case 'about': return <About />;
@@ -456,6 +489,12 @@ function renderPage(page, navigate, user, userProfile, onUpdateProfile, onLogout
     default: return <Home navigate={navigate} />;
   }
 }
+
+const BG_THEMES = [
+  { id: 'light', name: 'Light', icon: '☀️', desc: 'Clean white surface' },
+  { id: 'dark', name: 'Dark', icon: '🌙', desc: 'Deep dark background' },
+  { id: 'dim', name: 'Dim', icon: '🌓', desc: 'Soft dark, easy on eyes' },
+];
 
 const APP_THEME_COLORS = [
   { id: 'orange',   p: '#FF5722', rgb: '255, 87, 34',   pc: '#FFDBCF', opc: '#3E0B00', category: 'Dynamic' },
@@ -518,7 +557,7 @@ export default function App() {
   // ── PERSISTENT STATE (survives refresh/reopen) ──────────────────────────
   const [page, setPage] = useLocalStorage('ec_page', 'home');
 
-  const [isLight, setIsLight] = useLocalStorage('ec_is_light', true);
+  const [bgTheme, setBgTheme] = useLocalStorage('ec_bg_theme', 'light');
   const [activeTheme, setActiveTheme] = useLocalStorage('ec_theme', 'sky');
   const [recentColors, setRecentColors] = useLocalStorage('ec_recent_colors', []);
   const [activeFont, setActiveFont] = useLocalStorage('ec_font', 'default');
@@ -535,7 +574,10 @@ export default function App() {
   const [completedModules, setCompletedModules] = useLocalStorage('ec_completed_modules', []);
   const [bookmarkedModules, setBookmarkedModules] = useLocalStorage('ec_bookmarked_modules', []);
 
-  // Track daily visit for streak
+  const [dailyXpDate, setDailyXpDate] = useLocalStorage('ec_daily_xp', '');
+  const [dailyXpMessage, setDailyXpMessage] = useState(null);
+
+  // Track daily visit for streak + award daily login XP
   useEffect(() => {
     const today = new Date().toDateString();
     if (lastVisitDate !== today) {
@@ -548,6 +590,29 @@ export default function App() {
         setStreak(1);
       }
       setLastVisitDate(today);
+
+      // Award daily login XP (once per calendar day)
+      const uid = googleUser?.uid || localStorage.getItem('eatclub_uid');
+      if (dailyXpDate !== today && uid) {
+        const dailyBonus = 3;
+        const currentXp = parseInt(localStorage.getItem('ec_xp') || '0');
+        const newXp = currentXp + dailyBonus;
+        setXp(newXp);
+        setDailyXpDate(today);
+        setDailyXpMessage(`+${dailyBonus} XP Daily Login`);
+        setTimeout(() => setDailyXpMessage(null), 4000);
+        // Sync to Firebase leaderboard
+        const name = googleUser?.displayName || localStorage.getItem('eatclub_agent_name') || '';
+        const email = googleUser?.email || localStorage.getItem('eatclub_agent_email') || '';
+        const photoURL = googleUser?.photoURL || '';
+        const role = localStorage.getItem('eatclub_role') || '';
+        const completedList = JSON.parse(localStorage.getItem('ec_completed_modules') || '[]');
+        const completedCount = Array.isArray(completedList) ? completedList.length : 0;
+        set(dbRef(db, 'leaderboard/' + uid), {
+          name, email, photoURL, role, points: newXp,
+          completedCount, lastActive: Date.now()
+        }).catch(() => null);
+      }
     }
   }, []);
 
@@ -615,8 +680,7 @@ export default function App() {
     }
   }, []);
 
-  const [showSettings, setShowSettings] = useState(false);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showProfilePanel, setShowProfilePanel] = useState(false);
 
   const toggleGroup = (grpId) => {
     setOpenGroups(prev => {
@@ -645,6 +709,8 @@ export default function App() {
     role: localStorage.getItem('eatclub_role') || '',
   }));
   const [showProfileSetup, setShowProfileSetup] = useState(false);
+  const [userRole, setUserRole] = useState(localStorage.getItem('eatclub_role') || '');
+  const [userIsAdmin, setUserIsAdmin] = useState(localStorage.getItem('eatclub_is_admin') === 'true');
 
   const handleGoogleLogin = async () => {
     try {
@@ -689,12 +755,13 @@ export default function App() {
 
       // Save user profile to Firebase (for leaderboard & profile sync)
       if (userData.uid) {
+        const autoRole = userData.email === MAIN_ADMIN_EMAIL ? 'Admin' : (existingRole || '');
         set(dbRef(db, 'users/' + userData.uid), {
           name: userData.displayName,
           email: userData.email,
           photoURL: userData.photoURL || '',
           bio: existingBio || '',
-          role: existingRole || '',
+          role: autoRole,
           lastLogin: Date.now()
         }).catch(() => null);
         // Seed leaderboard entry
@@ -702,11 +769,15 @@ export default function App() {
           name: userData.displayName,
           email: userData.email,
           photoURL: userData.photoURL || '',
-          role: existingRole || '',
+          role: autoRole,
           points: 0,
           completedCount: 0,
           lastActive: Date.now()
         }).catch(() => null);
+        if (autoRole === 'Admin') {
+          localStorage.setItem('eatclub_role', 'Admin');
+          setUserRole('Admin');
+        }
       }
     } catch (err) {
       console.error('Google login error:', err);
@@ -735,6 +806,29 @@ export default function App() {
     });
     return () => unsub();
   }, []);
+
+  // Sync role & isAdmin from Firebase
+  useEffect(() => {
+    const uid = googleUser?.uid || localStorage.getItem('eatclub_uid');
+    if (!uid) return;
+    const email = googleUser?.email || localStorage.getItem('eatclub_agent_email') || '';
+
+    const userRef = dbRef(db, 'users/' + uid);
+    const unsub = onValue(userRef, (snap) => {
+      const data = snap.val();
+      if (!data) return;
+
+      const role = data.role || '';
+      const isAdmin = data.isAdmin === true;
+
+      setUserRole(role);
+      localStorage.setItem('eatclub_role', role);
+
+      setUserIsAdmin(isAdmin);
+      localStorage.setItem('eatclub_is_admin', isAdmin ? 'true' : 'false');
+    });
+    return () => unsub();
+  }, [googleUser?.uid]);
 
   const handleLogout = async () => {
     try {
@@ -1041,22 +1135,9 @@ export default function App() {
     document.documentElement.style.setProperty('--anim-multiplier', speed.multiplier);
   };
 
-  // Create manual backup
-  const createBackup = () => {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const versionFolder = `src/_versions/v_${timestamp}`;
-    // Note: Actual file copying would be done manually or via script
-    // This just logs for now
-    console.log(`Backup would be created at: ${versionFolder}`);
-    alert(`✅ Backup created!\n\nFolder: ${versionFolder}\n\nCheck src/_versions/ folder to restore later.`);
-  };
-
-  // ── RESTORE THEME + LIGHT/DARK ON EVERY MOUNT ──────────────────────────
+  // ── RESTORE THEME ON EVERY MOUNT ──────────────────────────────────────
   useEffect(() => {
-    // Restore light/dark class
-    if (isLight) document.body.classList.add('light-theme');
-    else document.body.classList.remove('light-theme');
-
+    applyBgTheme(bgTheme);
     // Restore theme color CSS variables
     const t = APP_THEME_COLORS.find(c => c.id === activeTheme);
     if (t) {
@@ -1081,11 +1162,10 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once on mount — values come from persisted localStorage
 
-  // ── ALSO KEEP LIGHT/DARK CLASS IN SYNC WHEN TOGGLED ────────────────────
+  // ── KEEP BG THEME IN SYNC WHEN CHANGED ────────────────────────────────
   useEffect(() => {
-    if (isLight) document.body.classList.add('light-theme');
-    else document.body.classList.remove('light-theme');
-  }, [isLight]);
+    applyBgTheme(bgTheme);
+  }, [bgTheme]);
 
 
   const activatePartyMode = () => {
@@ -1112,18 +1192,37 @@ export default function App() {
     }, 5000);
   };
 
-  const toggleTheme = () => {
-    setIsLight(prev => {
-      const next = !prev;
-      if (next) {
-        document.body.classList.remove('dark-theme');
-        document.body.classList.add('light-theme');
-      } else {
-        document.body.classList.remove('light-theme');
-        document.body.classList.add('dark-theme');
-      }
-      return next;
-    });
+  const applyBgTheme = (id) => {
+    const root = document.documentElement;
+    // Remove all bg-theme classes
+    document.body.classList.remove('light-theme', 'dark-theme', 'dim-theme');
+    if (id === 'light') {
+      document.body.classList.add('light-theme');
+      root.style.removeProperty('--md-background');
+      root.style.removeProperty('--md-surface');
+      root.style.removeProperty('--md-surface-variant');
+      root.style.removeProperty('--md-on-surface');
+      root.style.removeProperty('--md-on-surface-var');
+    } else if (id === 'dark') {
+      document.body.classList.add('dark-theme');
+      root.style.removeProperty('--md-background');
+      root.style.removeProperty('--md-surface');
+      root.style.removeProperty('--md-surface-variant');
+      root.style.removeProperty('--md-on-surface');
+      root.style.removeProperty('--md-on-surface-var');
+    } else if (id === 'dim') {
+      document.body.classList.add('dim-theme');
+      root.style.setProperty('--md-background', '#13132B');
+      root.style.setProperty('--md-surface', '#1A1A3E');
+      root.style.setProperty('--md-surface-variant', '#25255A');
+      root.style.setProperty('--md-on-surface', '#E8E8F4');
+      root.style.setProperty('--md-on-surface-var', '#C0C0E0');
+    }
+  };
+
+  const changeBgTheme = (id) => {
+    setBgTheme(id);
+    applyBgTheme(id);
   };
 
   const navigate = (id) => {
@@ -1148,49 +1247,22 @@ export default function App() {
   ];
 
 
+  // ── ADMIN ROUTE GUARD ──
+  const adminUser = { email: googleUser?.email || localStorage.getItem('eatclub_agent_email'), isAdmin: userIsAdmin };
+  useEffect(() => {
+    if (page === 'admin' && !isAdminRole(adminUser)) {
+      setPage('home');
+    }
+  }, [page, adminUser.email, adminUser.isAdmin, setPage]);
+
   // ── WELCOME ANIMATION ──
   if (showWelcome) {
     return <WelcomeAnimation onComplete={handleWelcomeComplete} />;
   }
 
-  // ── LOGIN PAGE (Google-only) ──
+  // ── LOGIN PAGE (Dynamic EatClub Entry) ──
   if (!isAuthorized) {
-    return (
-      <div className="passcode-container">
-        <div className="passcode-card">
-          <div className="passcode-avatar-wrap">
-            <div className="passcode-avatar"><img src="/app-icon.png" alt="EatClub" style={{ width: 56, height: 56, borderRadius: 16, objectFit: 'cover' }} /></div>
-            <div className="passcode-online-dot"></div>
-          </div>
-          <div className="passcode-header">
-            <h1>EatClub CC Portal</h1>
-            <p>Sign in with Google to access the workspace</p>
-          </div>
-
-          <button onClick={handleGoogleLogin} className="google-signin-btn" type="button">
-            <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-            </svg>
-            Continue with Google
-          </button>
-
-          <div className="admin-contact">
-            <div className="admin-contact-title">Contact Admin/Developer</div>
-            <a href="https://www.linkedin.com/in/arif-ansari-a9586810a/" target="_blank" rel="noopener noreferrer" className="contact-mini-badge">
-              <div className="mini-avatar">👨‍💻</div>
-              <div className="mini-details">
-                <div className="mini-name">MD ARIF ANSARI</div>
-                <div className="mini-handle">Admin & Lead Developer</div>
-              </div>
-              <span className="material-symbols-outlined" style={{marginLeft: 'auto', fontSize: 18}}>open_in_new</span>
-            </a>
-          </div>
-        </div>
-      </div>
-    );
+    return <EntryPage onGoogleLogin={handleGoogleLogin} />;
   }
 
   // ── PROFILE SETUP OVERLAY (after Google login) ──
@@ -1284,226 +1356,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ══════ SETTINGS MODAL ══════ */}
-      {showSettings && (
-        <div className="contact-modal-overlay" onClick={() => setShowSettings(false)}>
-          <div className="contact-card" onClick={e => e.stopPropagation()} style={{ maxWidth:420,borderRadius:28,overflow:'hidden',padding:0,border:'none',background:'var(--md-surface)', maxHeight:'85vh', display:'flex', flexDirection:'column' }}>
-            <div style={{ padding:'20px 24px 16px',borderBottom:'1px solid var(--md-outline)',display:'flex',alignItems:'center',gap:10, flexShrink:0 }}>
-              <span className="material-symbols-outlined" style={{ fontSize:20,color:'var(--md-primary)' }}>settings</span>
-              <span style={{ fontSize:18,fontWeight:900,color:'var(--md-on-surface)' }}>Settings</span>
-              <button onClick={() => setShowSettings(false)} style={{ marginLeft:'auto',width:32,height:32,borderRadius:8,border:'none',background:'var(--md-surface-variant)',color:'var(--md-on-surface)',cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <span className="material-symbols-outlined" style={{ fontSize:20 }}>close</span>
-              </button>
-            </div>
-            <div style={{ padding:'16px 24px 24px', overflowY:'auto', flex:1 }}>
-              {/* Recent Colors - Quick Select */}
-              {recentColors.length > 0 && (
-                <div style={{ marginBottom:24 }}>
-                  <div style={{ fontSize:11,fontWeight:800,color:'var(--md-on-surface-var)',marginBottom:10,textTransform:'uppercase',letterSpacing:.5 }}>Recent Colors</div>
-                  <div style={{ display:'flex',gap:10 }}>
-                    {recentColors.map((t, i) => (
-                      <button
-                        key={i}
-                        onClick={() => changeThemeColor(t)}
-                        title={t.id.charAt(0).toUpperCase() + t.id.slice(1)}
-                        style={{
-                          width:36,height:36,borderRadius:'50%',
-                          border: activeTheme === t.id ? `3px solid var(--md-on-surface)` : '2px solid transparent',
-                          background: t.p,
-                          cursor:'pointer',
-                          transition:'all .2s',
-                          transform: activeTheme === t.id ? 'scale(1.15)' : 'scale(1)',
-                          boxShadow: activeTheme === t.id ? `0 0 12px ${t.p}80` : 'none',
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Theme Color - Full Selection */}
-              <div style={{ marginBottom:24 }}>
-                <div style={{ fontSize:11,fontWeight:800,color:'var(--md-on-surface-var)',marginBottom:10,textTransform:'uppercase',letterSpacing:.5 }}>Choose Color Theme</div>
-                {['Dynamic','Simple','Pro'].map(cat => (
-                  <div key={cat} style={{ marginBottom:12 }}>
-                    <div style={{ fontSize:9,fontWeight:800,opacity:.45,marginBottom:8,letterSpacing:1,color:'var(--md-on-surface-var)' }}>{cat.toUpperCase()}</div>
-                    <div style={{ display:'grid',gridTemplateColumns:'repeat(4, 1fr)',gap:8 }}>
-                      {APP_THEME_COLORS.filter(t => t.category === cat).map(t => (
-                        <button
-                          key={t.id}
-                          onClick={() => changeThemeColor(t)}
-                          title={t.id.charAt(0).toUpperCase() + t.id.slice(1)}
-                          style={{
-                            width:40,height:40,borderRadius:12,
-                            border: activeTheme === t.id ? `3px solid var(--md-on-surface)` : '1px solid var(--md-outline)',
-                            background: t.p,
-                            cursor:'pointer',
-                            transition:'all .15s',
-                            transform: activeTheme === t.id ? 'scale(1.1)' : 'scale(1)',
-                            boxShadow: activeTheme === t.id ? `0 4px 12px ${t.p}60` : 'none',
-                            display:'flex',alignItems:'center',justifyContent:'center',
-                            position:'relative',
-                          }}
-                        >
-                          {activeTheme === t.id && (
-                            <span style={{ color:'white',fontSize:16,textShadow:'0 1px 2px rgba(0,0,0,0.5)' }}>✓</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Current Theme Info */}
-              <div style={{ marginBottom:24,padding:'12px 16px',background:'var(--md-surface-variant)',borderRadius:12 }}>
-                <div style={{ fontSize:10,fontWeight:800,color:'var(--md-on-surface-var)',marginBottom:6,textTransform:'uppercase' }}>Active Theme</div>
-                <div style={{ display:'flex',alignItems:'center',gap:10 }}>
-                  <span style={{ width:20,height:20,borderRadius:'50%',background:APP_THEME_COLORS.find(t => t.id === activeTheme)?.p || '#00BCD4' }} />
-                  <span style={{ fontSize:13,fontWeight:700,color:'var(--md-on-surface)',textTransform:'capitalize' }}>
-                    {activeTheme}
-                  </span>
-                  <span style={{ fontSize:11,color:'var(--md-on-surface-var)',marginLeft:'auto' }}>
-                    {isLight ? '☀️ Light' : '🌙 Dark'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Light/Dark Toggle */}
-              <div style={{ marginBottom:20 }}>
-                <div style={{ fontSize:11,fontWeight:800,color:'var(--md-on-surface-var)',marginBottom:10,textTransform:'uppercase',letterSpacing:.5 }}>Mode</div>
-                <button onClick={toggleTheme} style={{
-                  width:'100%',padding:'12px 14px',borderRadius:12,
-                  border:'1px solid var(--md-outline)',
-                  background: isLight ? 'var(--md-surface-variant)' : 'var(--md-primary-container)',
-                  color:'var(--md-on-surface)',
-                  fontSize:13,fontWeight:700,cursor:'pointer',
-                  display:'flex',alignItems:'center',gap:12,justifyContent:'center',
-                }}>
-                  <span style={{ fontSize:20 }}>{isLight ? '🌙' : '☀️'}</span>
-                  {isLight ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-                </button>
-              </div>
-
-              {/* Font Selection */}
-              <div style={{ marginBottom:24 }}>
-                <div style={{ fontSize:11,fontWeight:800,color:'var(--md-on-surface-var)',marginBottom:10,textTransform:'uppercase',letterSpacing:.5 }}>Font Style</div>
-                <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:8 }}>
-                  {FONT_OPTIONS.map(font => (
-                    <button
-                      key={font.id}
-                      onClick={() => changeFont(font)}
-                      style={{
-                        padding:'10px 12px',borderRadius:10,fontSize:12,cursor:'pointer',
-                        border: activeFont === font.id ? `2px solid var(--md-primary)` : '1px solid var(--md-outline)',
-                        background: activeFont === font.id ? 'var(--md-primary-container)' : 'var(--md-surface-variant)',
-                        color: 'var(--md-on-surface)',
-                        fontFamily: font.family,
-                        transition:'all .15s',
-                      }}
-                    >
-                      {font.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Animation Speed */}
-              <div style={{ marginBottom:24 }}>
-                <div style={{ fontSize:11,fontWeight:800,color:'var(--md-on-surface-var)',marginBottom:10,textTransform:'uppercase',letterSpacing:.5 }}>Animation Speed</div>
-                <div style={{ display:'grid',gridTemplateColumns:'repeat(4, 1fr)',gap:8 }}>
-                  {ANIMATION_SPEEDS.map(speed => (
-                    <button
-                      key={speed.id}
-                      onClick={() => changeAnimSpeed(speed)}
-                      style={{
-                        padding:'8px',borderRadius:10,fontSize:11,cursor:'pointer',
-                        border: animSpeed === speed.id ? `2px solid var(--md-primary)` : '1px solid var(--md-outline)',
-                        background: animSpeed === speed.id ? 'var(--md-primary-container)' : 'var(--md-surface-variant)',
-                        color: 'var(--md-on-surface)',
-                        fontWeight: animSpeed === speed.id ? 700 : 500,
-                        transition:'all .15s',
-                      }}
-                    >
-                      {speed.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Custom Color Picker */}
-              <div style={{ marginBottom:24 }}>
-                <div style={{ fontSize:11,fontWeight:800,color:'var(--md-on-surface-var)',marginBottom:10,textTransform:'uppercase',letterSpacing:.5 }}>Custom Color</div>
-                <div style={{ display:'flex',alignItems:'center',gap:12 }}>
-                  <input
-                    type="color"
-                    id="customColorPicker"
-                    onChange={(e) => {
-                      const hex = e.target.value;
-                      const r = parseInt(hex.slice(1,3), 16);
-                      const g = parseInt(hex.slice(3,5), 16);
-                      const b = parseInt(hex.slice(5,7), 16);
-                      const rgb = `${r}, ${g}, ${b}`;
-                      const hexLighter = `#${hex.slice(1,3).replace(/00/g, 'FF').slice(0,2)}${hex.slice(3,5).replace(/00/g, 'FF').slice(0,2)}${hex.slice(5,7).replace(/00/g, 'FF').slice(0,2)}`;
-                      const customTheme = { id: 'custom', p: hex, rgb, pc: hexLighter, opc: '#000000', category: 'Custom' };
-                      changeThemeColor(customTheme);
-                    }}
-                    style={{ width:48,height:48,border:'none',borderRadius:12,cursor:'pointer',background:'transparent' }}
-                  />
-                  <label htmlFor="customColorPicker" style={{ fontSize:12,color:'var(--md-on-surface-var)',cursor:'pointer' }}>
-                    Pick any color for your theme
-                  </label>
-                </div>
-              </div>
-
-              {/* Version & Backup */}
-              <div style={{ marginBottom:20 }}>
-                <div style={{ fontSize:11,fontWeight:800,color:'var(--md-on-surface-var)',marginBottom:10,textTransform:'uppercase',letterSpacing:.5 }}>Version & Backup</div>
-                <div style={{ padding:'12px',background:'var(--md-surface-variant)',borderRadius:12,marginBottom:12 }}>
-                  <div style={{ fontSize:12,fontWeight:700,color:'var(--md-on-surface)' }}>Current: v1.0.0</div>
-                  <div style={{ fontSize:10,color:'var(--md-on-surface-var)' }}>2025-05-17</div>
-                </div>
-                <button
-                  onClick={createBackup}
-                  style={{
-                    width:'100%',padding:'12px',borderRadius:12,
-                    border:'1px solid var(--md-outline)',
-                    background:'var(--md-surface-variant)',
-                    color:'var(--md-on-surface)',fontSize:13,fontWeight:700,cursor:'pointer',
-                    display:'flex',alignItems:'center',gap:10,justifyContent:'center',
-                  }}
-                >
-                  💾 Create Backup Now
-                </button>
-                <p style={{ fontSize:10,color:'var(--md-on-surface-var)',marginTop:8,textAlign:'center' }}>
-                  Check <code style={{ background:'var(--md-surface-variant)',padding:'2px 4px',borderRadius:4 }}>src/_versions/</code> folder
-                </p>
-              </div>
-
-              {/* Profile Icon */}
-              <div>
-                <div style={{ fontSize:11,fontWeight:800,color:'var(--md-on-surface-var)',marginBottom:10,textTransform:'uppercase',letterSpacing:.5 }}>Profile Photo</div>
-                <div style={{ display:'flex',alignItems:'center',gap:14 }}>
-                  <div style={{ width:48,height:48,borderRadius:'50%',overflow:'hidden',background:(()=>{try{const a=JSON.parse(localStorage.getItem('eatclub_avatar'));return a?.bg||'linear-gradient(135deg,var(--md-primary),#FF8F00)';}catch{return 'linear-gradient(135deg,var(--md-primary),#FF8F00)'}})(),flexShrink:0 }}>
-                    {(() => {
-                      const avatar = (() => { try { return JSON.parse(localStorage.getItem('eatclub_avatar')); } catch { return null; } })();
-                      const name = localStorage.getItem('eatclub_agent_name')||'U';
-                      if (avatar?.type === 'emoji') return <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20 }}>{avatar.value}</div>;
-                      if (avatar?.type === 'google' && googleUser?.photoURL) return <img src={googleUser.photoURL} alt="" style={{ width:'100%',height:'100%',objectFit:'cover' }} />;
-                      if (avatar?.type === 'letter' || !googleUser?.photoURL) return <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:900,color:'#fff' }}>{name.charAt(0).toUpperCase()}</div>;
-                      return <img src={googleUser.photoURL} alt="" style={{ width:'100%',height:'100%',objectFit:'cover' }} />;
-                    })()}
-                  </div>
-                  <div style={{ flex:1,fontSize:11,color:'var(--md-on-surface-var)',lineHeight:1.5 }}>
-                    Synced with Google login. Update from your <strong style={{color:'var(--md-primary)',cursor:'pointer'}} onClick={() => { setShowSettings(false); setPage('dashboard'); }}>Dashboard → Profile</strong>.
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ══════ SIDEBAR NAV ══════ */}
       <nav className="nav-rail" aria-label="Main Navigation">
 
@@ -1520,8 +1372,11 @@ export default function App() {
 
         {/* Fixed top nav items (never scroll) */}
         <div className="nav-dashboard-fixed">
-          {NAV_GROUPS.slice(0, 2).map(item => {
+          {NAV_GROUPS.slice(0, 3).map(item => {
             if (item.type === 'single') {
+              if (item.id === 'admin' && !isAdminRole(adminUser)) {
+                return null;
+              }
               return (
                 <button
                   key={item.id}
@@ -1541,8 +1396,9 @@ export default function App() {
 
         {/* Nav Items (scrollable) */}
         <div className="nav-items-scroll">
-          {NAV_GROUPS.slice(2).map(grp => {
+          {NAV_GROUPS.slice(3).map(grp => {
             if (grp.type === 'single') {
+              if (grp.id === 'admin' && !isAdminRole(adminUser)) return null;
               return (
                 <button
                   key={grp.id}
@@ -1607,43 +1463,196 @@ export default function App() {
           })}
         </div>
 
-        {/* Sidebar footer (fixed) */}
-        <div className="nav-footer" style={{ position:'relative' }}>
-          {/* Profile row (clickable → toggles dropdown) */}
-          <div className="nav-footer-row" style={{ cursor:'pointer' }}
-            onClick={() => setShowProfileMenu(p => !p)}
-            onMouseEnter={e => { const bg = e.currentTarget.querySelector('.nav-footer-avatar'); if (bg) { bg.style.boxShadow = '0 0 0 2px var(--md-primary)'; } }}
-            onMouseLeave={e => { const bg = e.currentTarget.querySelector('.nav-footer-avatar'); if (bg) { bg.style.boxShadow = 'none'; } }}>
-            <div className="nav-footer-avatar">
-              {(() => {
-                const avatar = (() => { try { return JSON.parse(localStorage.getItem('eatclub_avatar')); } catch { return null; } })();
-                const name = localStorage.getItem('eatclub_agent_name') || 'U';
-                if (avatar?.type === 'emoji') return <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16 }}>{avatar.value}</div>;
-                if (avatar?.type === 'google' && googleUser?.photoURL) return <img src={googleUser.photoURL} alt="" style={{ width:'100%',height:'100%',objectFit:'cover' }} />;
-                if (avatar?.type === 'letter' || !googleUser?.photoURL) return <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:900,color:'#fff',background:avatar?.bg || 'linear-gradient(135deg,var(--md-primary),#FF8F00)' }}>{name.charAt(0).toUpperCase()}</div>;
-                return <img src={googleUser.photoURL} alt="" style={{ width:'100%',height:'100%',objectFit:'cover' }} />;
-              })()}
+        {/* Sidebar spacer */}
+        <div style={{ height: 4 }} />
+      </nav>
+
+      {/* ══════ UNIFIED PROFILE & SETTINGS PANEL ══════ */}
+      {showProfilePanel && (
+        <>
+          <div className="profile-panel-overlay" onClick={() => setShowProfilePanel(false)} aria-hidden="true" />
+          <div
+            className="profile-panel"
+            role="dialog"
+            aria-label="Profile and Settings"
+            tabIndex={-1}
+            onKeyDown={e => { if (e.key === 'Escape') setShowProfilePanel(false); }}
+          >
+            {/* ── Header ── */}
+            <div style={{ padding:'20px 20px 16px', borderBottom:'1px solid var(--md-outline)', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+              <span style={{ fontSize:16,fontWeight:900,color:'var(--md-on-surface)' }}>Profile & Settings</span>
+              <button onClick={() => setShowProfilePanel(false)} style={{ width:32,height:32,borderRadius:8,border:'none',background:'var(--md-surface-variant)',color:'var(--md-on-surface)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }} aria-label="Close panel">
+                <span className="material-symbols-outlined" style={{ fontSize:18 }}>close</span>
+              </button>
             </div>
-            <span className="nav-footer-label">{localStorage.getItem('eatclub_agent_name') || 'User'}</span>
-          </div>
-          {/* Profile dropdown */}
-          {showProfileMenu && (
-            <>
-              <div style={{ position:'fixed',inset:0,zIndex:199 }} onClick={() => setShowProfileMenu(false)} />
-              <div className="nav-profile-dropdown">
-                <button className="nav-prof-drop-item" onClick={() => { setShowSettings(true); setShowProfileMenu(false); }}>
-                  <span className="material-symbols-outlined" style={{ fontSize:16 }}>settings</span>
-                  Settings
+
+            {/* ── Scrollable content ── */}
+            <div style={{ flex:1, overflowY:'auto', padding:'20px' }}>
+              {/* ═══ PROFILE ═══ */}
+              <div className="panel-section">
+                <div className="panel-section-header">Profile</div>
+                <div style={{ textAlign:'center', marginBottom:16 }}>
+                  <UserAvatar
+                    size="2xl"
+                    name={localStorage.getItem('eatclub_agent_name') || 'User'}
+                    photoURL={googleUser?.photoURL}
+                    style={{ margin: '0 auto 12px' }}
+                  />
+                  <div style={{ fontSize:17,fontWeight:800,color:'var(--md-on-surface)' }}>{localStorage.getItem('eatclub_agent_name') || 'User'}</div>
+                  <div style={{ fontSize:12,color:'var(--md-on-surface-var)',marginTop:2 }}>{localStorage.getItem('eatclub_agent_email') || ''}</div>
+                  <div style={{ display:'inline-block',marginTop:6,padding:'2px 12px',borderRadius:100,background:'rgba(var(--md-primary-rgb),.1)',color:'var(--md-primary)',fontSize:11,fontWeight:700 }}>{localStorage.getItem('eatclub_role') || 'Member'}</div>
+                </div>
+                <button onClick={() => { setShowProfilePanel(false); setPage('dashboard'); }}
+                  style={{ width:'100%',padding:'10px 16px',borderRadius:10,border:'1px solid var(--md-outline)',background:'var(--md-surface-variant)',color:'var(--md-on-surface)',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:8,justifyContent:'center',fontFamily:'inherit' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize:16 }}>open_in_new</span>
+                  Edit Full Profile on Dashboard
                 </button>
-                <button className="nav-prof-drop-item" onClick={() => { handleLogout(); setShowProfileMenu(false); }}>
+              </div>
+
+              {/* ═══ THEME ═══ */}
+              <div className="panel-section">
+                <div className="panel-section-header">Theme</div>
+
+                {/* Background theme */}
+                <div style={{ marginBottom:14 }}>
+                  <div style={{ fontSize:9,fontWeight:800,color:'var(--md-on-surface-var)',marginBottom:8,letterSpacing:.5 }}>BACKGROUND THEME</div>
+                  <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8 }}>
+                    {BG_THEMES.map(t => {
+                      const active = bgTheme === t.id;
+                      const previews = {
+                        light: 'linear-gradient(135deg,#e8eaed,#ffffff)',
+                        dark: 'linear-gradient(135deg,#1e1e1e,#121212)',
+                        dim: 'linear-gradient(135deg,#1A1A3E,#13132B)',
+                      };
+                      return (
+                        <button key={t.id} onClick={() => changeBgTheme(t.id)}
+                          style={{
+                            padding:'10px 6px',borderRadius:10,cursor:'pointer',fontFamily:'inherit',
+                            border: active ? '2px solid var(--md-primary)' : '1px solid var(--md-outline)',
+                            background: active ? 'var(--md-primary-container)' : 'var(--md-surface-variant)',
+                            transition:'all .15s',textAlign:'center',
+                          }}>
+                          <div style={{
+                            width:'100%',height:40,borderRadius:6,marginBottom:6,
+                            background: previews[t.id],
+                            border:'1px solid rgba(0,0,0,.08)',
+                            display:'flex',alignItems:'center',justifyContent:'center',
+                          }}>
+                            <span style={{ fontSize:16 }}>{t.icon}</span>
+                          </div>
+                          <div style={{ fontSize:11,fontWeight:700,color:'var(--md-on-surface)' }}>{t.name}</div>
+                          <div style={{ fontSize:8,color:'var(--md-on-surface-var)',marginTop:1 }}>{t.desc}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Active color pill */}
+                <div style={{ marginBottom:16,padding:'10px 14px',background:'var(--md-surface-variant)',borderRadius:10,display:'flex',alignItems:'center',gap:10 }}>
+                  <span style={{ width:16,height:16,borderRadius:'50%',background:(APP_THEME_COLORS.find(t => t.id === activeTheme)?.p || '#00BCD4'),flexShrink:0 }} />
+                  <span style={{ fontSize:12,fontWeight:700,color:'var(--md-on-surface)',textTransform:'capitalize',flex:1 }}>{activeTheme} accent</span>
+                  <span style={{ fontSize:10,color:'var(--md-on-surface-var)' }}>{BG_THEMES.find(t => t.id === bgTheme)?.name || 'Light'}</span>
+                </div>
+
+                {/* Theme color grid */}
+                {recentColors.length > 0 && (
+                  <div style={{ marginBottom:12 }}>
+                    <div style={{ fontSize:9,fontWeight:800,color:'var(--md-on-surface-var)',marginBottom:8,letterSpacing:.5 }}>RECENT</div>
+                    <div style={{ display:'flex',gap:8 }}>
+                      {recentColors.map((t, i) => (
+                        <button key={i} onClick={() => changeThemeColor(t)} title={t.id}
+                          style={{ width:28,height:28,borderRadius:'50%',border:activeTheme === t.id ? '2px solid var(--md-on-surface)' : '2px solid transparent',background:t.p,cursor:'pointer',transition:'all .15s',transform:activeTheme === t.id ? 'scale(1.1)' : 'scale(1)' }} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {['Dynamic','Simple','Pro'].map(cat => (
+                  <div key={cat} style={{ marginBottom:10 }}>
+                    <div style={{ fontSize:9,fontWeight:800,opacity:.4,marginBottom:6,letterSpacing:.5,color:'var(--md-on-surface-var)' }}>{cat.toUpperCase()}</div>
+                    <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6 }}>
+                      {APP_THEME_COLORS.filter(t => t.category === cat).map(t => (
+                        <button key={t.id} onClick={() => changeThemeColor(t)} title={t.id}
+                          style={{ width:36,height:36,borderRadius:8,border:activeTheme === t.id ? '2px solid var(--md-on-surface)' : '1px solid var(--md-outline)',background:t.p,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',position:'relative',transition:'all .1s' }}>
+                          {activeTheme === t.id && <span style={{ color:'#fff',fontSize:12,textShadow:'0 1px 2px rgba(0,0,0,.5)' }}>✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Custom color picker */}
+                <div style={{ display:'flex',alignItems:'center',gap:10,marginTop:6 }}>
+                  <input type="color" id="customColorPicker"
+                    onChange={(e) => {
+                      const hex = e.target.value;
+                      const r = parseInt(hex.slice(1,3), 16);
+                      const g = parseInt(hex.slice(3,5), 16);
+                      const b = parseInt(hex.slice(5,7), 16);
+                      changeThemeColor({ id:'custom', p:hex, rgb:`${r}, ${g}, ${b}`, pc:`#${hex.slice(1,3)}${hex.slice(3,5)}${hex.slice(5,7)}`, opc:'#000', category:'Custom' });
+                    }}
+                    style={{ width:36,height:36,border:'none',borderRadius:8,cursor:'pointer',background:'transparent',padding:0 }} />
+                  <label htmlFor="customColorPicker" style={{ fontSize:11,color:'var(--md-on-surface-var)',cursor:'pointer' }}>Custom color</label>
+                </div>
+              </div>
+
+              {/* ═══ APPEARANCE ═══ */}
+              <div className="panel-section">
+                <div className="panel-section-header">Appearance</div>
+
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:10,fontWeight:700,color:'var(--md-on-surface-var)',marginBottom:8 }}>Font</div>
+                  <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:6 }}>
+                    {FONT_OPTIONS.map(font => (
+                      <button key={font.id} onClick={() => changeFont(font)}
+                        style={{ padding:'8px 10px',borderRadius:8,fontSize:11,cursor:'pointer',
+                          border: activeFont === font.id ? '2px solid var(--md-primary)' : '1px solid var(--md-outline)',
+                          background: activeFont === font.id ? 'var(--md-primary-container)' : 'var(--md-surface-variant)',
+                          color:'var(--md-on-surface)',fontFamily:font.family,transition:'all .1s' }}>
+                        {font.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize:10,fontWeight:700,color:'var(--md-on-surface-var)',marginBottom:8 }}>Animation Speed</div>
+                  <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6 }}>
+                    {ANIMATION_SPEEDS.map(speed => (
+                      <button key={speed.id} onClick={() => changeAnimSpeed(speed)}
+                        style={{ padding:'6px 4px',borderRadius:8,fontSize:10,cursor:'pointer',
+                          border: animSpeed === speed.id ? '2px solid var(--md-primary)' : '1px solid var(--md-outline)',
+                          background: animSpeed === speed.id ? 'var(--md-primary-container)' : 'var(--md-surface-variant)',
+                          color:'var(--md-on-surface)',fontWeight: animSpeed === speed.id ? 800 : 500,transition:'all .1s' }}>
+                        {speed.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* ═══ ACCOUNT ═══ */}
+              <div className="panel-section">
+                <div className="panel-section-header">Account</div>
+
+                <div style={{ padding:'12px',background:'var(--md-surface-variant)',borderRadius:10,marginBottom:16 }}>
+                  <div style={{ fontSize:11,fontWeight:700,color:'var(--md-on-surface)' }}>v1.0.0</div>
+                  <div style={{ fontSize:9,color:'var(--md-on-surface-var)' }}>2025-05-17</div>
+                </div>
+
+                <button onClick={() => { handleLogout(); setShowProfilePanel(false); }}
+                  style={{ width:'100%',padding:'12px 16px',borderRadius:10,border:'1px solid rgba(233,30,99,.2)',background:'rgba(233,30,99,.06)',color:'#E91E63',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:8,justifyContent:'center',fontFamily:'inherit' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(233,30,99,.12)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(233,30,99,.06)'}>
                   <span className="material-symbols-outlined" style={{ fontSize:16 }}>logout</span>
                   Sign Out
                 </button>
               </div>
-            </>
-          )}
-        </div>
-      </nav>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ══════ MAIN ══════ */}
       <div className="main-content">
@@ -1759,7 +1768,7 @@ export default function App() {
                         myId={localStorage.getItem('eatclub_member_id') || ''}
                         myName={localStorage.getItem('eatclub_agent_name') || 'User'}
                         myRole={localStorage.getItem('eatclub_role') || ''}
-                        myPhotoURL={localStorage.getItem('eatclub_avatar') || ''}
+                        myPhotoURL={(() => { try { const a = JSON.parse(localStorage.getItem('eatclub_avatar')); if (a?.type === 'google') return googleUser?.photoURL || ''; if (a?.type === 'emoji') return a.value || ''; return googleUser?.photoURL || ''; } catch { return googleUser?.photoURL || ''; } })()}
                         onBack={() => setDmTarget(null)}
                       />
                     ) : (
@@ -1869,9 +1878,7 @@ export default function App() {
                                       onMouseEnter={e => e.currentTarget.style.transform = 'translateX(4px)'}
                                       onMouseLeave={e => e.currentTarget.style.transform = 'none'}
                                     >
-                                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: `linear-gradient(135deg, ${getUserColor(conv.otherUserName)}, ${getUserColor(conv.otherUserName)}88)`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, flexShrink: 0, overflow: 'hidden' }}>
-                                        {conv.otherPhotoURL ? <img src={conv.otherPhotoURL} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (conv.otherUserName || '?').charAt(0).toUpperCase()}
-                                      </div>
+                                      <UserAvatar size={40} name={conv.otherUserName} photoURL={conv.otherPhotoURL} />
                                       <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                                           <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--md-on-surface)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{conv.otherUserName}</div>
@@ -1948,14 +1955,14 @@ export default function App() {
                               <div key={member.id || idx} className={`member-card ${member.isMe ? 'is-me' : ''}`}
                                 style={{ animationDelay: `${idx * 0.05}s` }}>
                                 <div className="member-avatar">
-                                  {member.photoURL ? (
-                                    <div className="member-avatar-circle" style={{ overflow:'hidden', padding:0 }}>
-                                      <img src={member.photoURL} alt="" style={{ width:'100%',height:'100%',objectFit:'cover' }} />
-                                    </div>
-                                  ) : (
-                                    <div className="member-avatar-circle">{safeName.charAt(0).toUpperCase()}</div>
-                                  )}
-                                  <div className="member-status-dot online" />
+                                  <UserAvatar
+                                    size={36}
+                                    name={safeName}
+                                    photoURL={member.photoURL}
+                                    showStatus
+                                    status="online"
+                                    statusColor="#4CAF50"
+                                  />
                                 </div>
                                 <div className="member-info">
                                   <div className="member-name-row">
@@ -2032,14 +2039,14 @@ export default function App() {
                               <div key={member.id || idx} className="member-card offline"
                                 style={{ animationDelay: `${idx * 0.05}s` }}>
                                 <div className="member-avatar">
-                                  {member.photoURL ? (
-                                    <div className="member-avatar-circle" style={{ overflow:'hidden', padding:0 }}>
-                                      <img src={member.photoURL} alt="" style={{ width:'100%',height:'100%',objectFit:'cover' }} />
-                                    </div>
-                                  ) : (
-                                    <div className="member-avatar-circle">{safeName.charAt(0).toUpperCase()}</div>
-                                  )}
-                                  <div className={`member-status-dot ${isIdle ? 'idle' : 'off'}`} />
+                                  <UserAvatar
+                                    size={36}
+                                    name={safeName}
+                                    photoURL={member.photoURL}
+                                    showStatus
+                                    status={isIdle ? 'idle' : 'offline'}
+                                    statusColor={isIdle ? '#FF9800' : undefined}
+                                  />
                                 </div>
                                 <div className="member-info">
                                   <div className="member-name-row">
@@ -2113,8 +2120,18 @@ export default function App() {
               )}
             </div>
 
-            {/* User name + Avatar */}
-            <div style={{ display:'flex',alignItems:'center',gap:8,marginLeft:6 }}>
+            {/* Profile button - opens left panel */}
+            <button
+              onClick={() => setShowProfilePanel(true)}
+              className="topbar-profile-btn"
+              aria-label="Open profile panel"
+              aria-expanded={showProfilePanel}
+              style={{
+                display:'flex',alignItems:'center',gap:8,marginLeft:6,
+                background:'none',border:'none',cursor:'pointer',padding:'4px 6px',
+                borderRadius:10,color:'inherit',fontFamily:'inherit',
+              }}
+            >
               <div style={{ textAlign:'right' }}>
                 <div style={{ fontSize:11,fontWeight:800,color:'var(--md-on-surface)',lineHeight:1.2 }}>
                   {localStorage.getItem('eatclub_agent_name') || 'User'}
@@ -2123,63 +2140,71 @@ export default function App() {
                   {localStorage.getItem('eatclub_role') || 'Member'}
                 </div>
               </div>
-              <div
-                className="topbar-avatar"
-                title="Developer card"
-                style={{ padding: 0, overflow: 'hidden', cursor: 'pointer' }}
-                onClick={() => { activatePartyMode(); setShowContactCard(true); }}
-                role="button"
-                tabIndex={0}
-                aria-label="View developer card"
-              >
-                {(() => {
-                  const avatar = (() => { try { return JSON.parse(localStorage.getItem('eatclub_avatar')); } catch { return null; } })();
-                  const name = localStorage.getItem('eatclub_agent_name') || 'U';
-                  if (avatar?.type === 'emoji') return <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,background:avatar.bg || 'linear-gradient(135deg,var(--md-primary),#FF8F00)' }}>{avatar.value}</div>;
-                  if (avatar?.type === 'google' && googleUser?.photoURL) return <img src={googleUser.photoURL} alt="Profile" style={{ width:'100%',height:'100%',objectFit:'cover' }} />;
-                  if (avatar?.type === 'letter' || !googleUser?.photoURL) return <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',background:avatar?.bg || 'linear-gradient(135deg,var(--md-primary),#FF8F00)',color:'#fff',fontWeight:900,fontSize:14 }}>{name.charAt(0).toUpperCase()}</div>;
-                  return <img src={googleUser.photoURL} alt="Profile" style={{ width:'100%',height:'100%',objectFit:'cover' }} />;
-                })()}
-              </div>
-            </div>
+              <UserAvatar
+                size={32}
+                name={localStorage.getItem('eatclub_agent_name') || 'User'}
+                photoURL={googleUser?.photoURL}
+                style={{ pointerEvents: 'none' }}
+                alt="Profile"
+              />
+            </button>
           </div>
         </header>
 
         {/* PAGE CONTENT */}
-        <main key={page} role="main" style={{ paddingBottom: MODULE_PAGE_IDS.includes(page) ? '64px' : '0' }}>
+        <main key={page} role="main" className={MODULE_PAGE_IDS.includes(page) ? 'has-module-footer' : ''}>
           {renderPage(page, navigate, googleUser, userProfile, handleUpdateProfile, handleLogout, xp, streak, completedModules)}
         </main>
 
-        {/* ══════ MODULE ACTIONS BAR ══════ */}
-        {MODULE_PAGE_IDS.includes(page) && (
+        {/* Daily Login XP Toast */}
+        {dailyXpMessage && (
           <div style={{
-            position:'fixed',bottom:0,left:'var(--nav-width)',right:0,zIndex:999,
-            background:'var(--md-surface)',
-            borderTop:'1px solid var(--md-outline)',
-            padding:'10px 20px',
-            display:'flex',alignItems:'center',justifyContent:'space-between',
-            gap:12,flexWrap:'wrap',
+            position:'fixed', bottom: MODULE_PAGE_IDS.includes(page) ? 70 : 20, right: 20, zIndex: 9999,
+            padding:'10px 18px', borderRadius: 12,
+            background: 'linear-gradient(135deg, #FFD700, #FFA000)',
+            color: '#1a1a1a', fontSize: 13, fontWeight: 800,
+            boxShadow: '0 6px 24px rgba(255,165,0,0.4)',
+            display: 'flex', alignItems: 'center', gap: 8,
+            animation: 'chatPanelIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            pointerEvents: 'none',
           }}>
-            <div style={{ display:'flex',alignItems:'center',gap:12 }}>
-              <div style={{ display:'flex',alignItems:'center',gap:6,fontSize:11,fontWeight:700,color:'var(--md-on-surface-var)' }}>
-                <span className="material-symbols-outlined" style={{ fontSize:16,color:'#FF5722' }}>local_fire_department</span>
-                {streak} day streak
+            <span className="material-symbols-outlined" style={{fontSize:18}}>login</span>
+            {dailyXpMessage}
+          </div>
+        )}
+
+        {/* ══════ MODULE ACTIONS FOOTER ══════ */}
+        {MODULE_PAGE_IDS.includes(page) && (
+          <div className="module-footer" role="contentinfo" aria-label="Module progress footer">
+            {/* Left: Streak + XP details */}
+            <div className="module-footer-left">
+              <div className="module-footer-section">
+                <span className="material-symbols-outlined" style={{ fontSize:18,color:'#FF5722' }}>local_fire_department</span>
+                <div className="module-footer-stat">
+                  <span className="module-footer-stat-value streak">{streak}</span>
+                  <span className="module-footer-stat-label">Day Streak</span>
+                </div>
               </div>
-              <div style={{ width:1,height:20,background:'var(--md-outline)' }} />
-              <div style={{ display:'flex',alignItems:'center',gap:6,fontSize:11,fontWeight:700,color:'var(--md-on-surface-var)' }}>
-                <span className="material-symbols-outlined" style={{ fontSize:16,color:'#FFD700' }}>emoji_events</span>
-                {xp} XP
+              <div className="module-footer-divider" />
+              <div className="module-footer-section">
+                <span className="material-symbols-outlined" style={{ fontSize:18,color:'#FFD700' }}>emoji_events</span>
+                <div className="module-footer-stat">
+                  <span className="module-footer-stat-value xp">{xp}</span>
+                  <span className="module-footer-stat-label">Total XP</span>
+                </div>
               </div>
             </div>
-            <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+
+            {/* Right: Actions */}
+            <div className="module-footer-right">
               <button onClick={() => handleToggleBookmark(page)}
                 style={{
-                  padding:'8px 16px',borderRadius:100,
+                  padding:'7px 14px',borderRadius:100,
                   border:'1px solid var(--md-outline)',
                   background:bookmarkedModules.includes(page) ? 'rgba(255,152,0,.12)' : 'var(--md-surface-variant)',
                   color:bookmarkedModules.includes(page) ? '#FF9800' : 'var(--md-on-surface-var)',
                   fontSize:11,fontWeight:700,cursor:'pointer',
-                  display:'flex',alignItems:'center',gap:6,
+                  display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',
                 }}>
                 <span className="material-symbols-outlined" style={{ fontSize:14 }}>
                   {bookmarkedModules.includes(page) ? 'bookmark' : 'bookmark_border'}
@@ -2189,20 +2214,19 @@ export default function App() {
               {!completedModules.find(m => m.id === page || m === page) ? (
                 <button onClick={() => handleModuleComplete(page, PAGE_TITLES[page] || page)}
                   style={{
-                    padding:'8px 20px',borderRadius:100,
-                    border:'none',
+                    padding:'7px 18px',borderRadius:100,border:'none',
                     background:'linear-gradient(135deg,var(--md-primary),#FF8F00)',
                     color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',
-                    display:'flex',alignItems:'center',gap:6,
+                    display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',
                     boxShadow:'0 4px 14px rgba(var(--md-primary-rgb),.3)',
                   }}>
                   <span className="material-symbols-outlined" style={{ fontSize:14 }}>check_circle</span>
-                  Complete & Earn +25 XP
+                  Complete +25 XP
                 </button>
               ) : (
-                <div style={{ display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:100,background:'rgba(76,175,80,.1)',color:'#4CAF50',fontSize:11,fontWeight:700 }}>
+                <div style={{ display:'flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:100,background:'rgba(76,175,80,.1)',color:'#4CAF50',fontSize:11,fontWeight:700 }}>
                   <span className="material-symbols-outlined" style={{ fontSize:14 }}>check_circle</span>
-                  Completed
+                  Done
                 </div>
               )}
             </div>

@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, push, set, update, remove } from 'firebase/database';
+import { SIGNUP_ROLES, isRestrictedRole } from '../config/roles';
+import UserAvatar from '../components/UserAvatar';
+import { AVATAR_EMOJIS, AVATAR_GRADIENTS, notifyAvatarChange } from '../hooks/useAvatar';
 
 const S = {
   P: 'var(--md-primary)', Prgb: 'var(--md-primary-rgb)',
@@ -10,12 +13,19 @@ const S = {
   Out: 'var(--md-outline)',
 };
 const NOTE_COLORS = ['#FFE0B2','#FFCDD2','#C8E6C9','#B3E5FC','#E1BEE7','#FFF9C4','#B2EBF2','#D7CCC8'];
-const ROLE_OPTIONS = [
-  'Chat Executive', 'Senior Chat Executive', 'Email Support Agent', 'Call Support Agent',
-  'Team Lead', 'Quality Analyst', 'Operations Manager', 'Trainer',
-  'Admin', 'Super Admin', 'Developer',
-  'Customer Support Specialist', 'Escalation Specialist', 'Custom',
-];
+
+function stripHtml(html) {
+  const doc = new DOMParser().parseFromString(html || '', 'text/html');
+  return doc.body.textContent || '';
+}
+
+function noteTextColor(bg) {
+  if (!bg) return '#1a1a1a';
+  const hex = bg.replace('#', '');
+  const r = parseInt(hex.substring(0,2), 16), g = parseInt(hex.substring(2,4), 16), b = parseInt(hex.substring(4,6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.55 ? '#1a1a1a' : '#f1f3f4';
+}
 
 function formatTime(ts) {
   if (!ts) return '';
@@ -43,18 +53,6 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
   const [chatText, setChatText] = useState('');
   const chatListRef = useRef(null);
 
-  const AVATAR_EMOJIS = ['🎮','👨‍💻','👩‍💻','😎','🚀','🌟','💪','🎯','🔥','💎','🧠','🌈'];
-  const AVATAR_GRADIENTS = [
-    'linear-gradient(135deg,var(--md-primary),#FF8F00)',
-    'linear-gradient(135deg,#E91E63,#9C27B0)',
-    'linear-gradient(135deg,#2196F3,#00BCD4)',
-    'linear-gradient(135deg,#4CAF50,#8BC34A)',
-    'linear-gradient(135deg,#FF5722,#FF9800)',
-    'linear-gradient(135deg,#673AB7,#3F51B5)',
-    'linear-gradient(135deg,#607D8B,#37474F)',
-    'linear-gradient(135deg,#795548,#A1887F)',
-  ];
-
   // User data extraction
   const userEmail = user?.email || localStorage.getItem('eatclub_agent_email') || '';
   const userName = user?.displayName || userProfile?.name || localStorage.getItem('eatclub_agent_name') || 'User';
@@ -69,6 +67,7 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
   const [noteContent, setNoteContent] = useState('');
   const [noteColor, setNoteColor] = useState(NOTE_COLORS[0]);
   const [noteSaved, setNoteSaved] = useState(true);
+  const [noteSearch, setNoteSearch] = useState('');
   const noteTimer = useRef(null);
   const noteEditorRef = useRef(null);
 
@@ -176,8 +175,15 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
     if (activeNoteId === noteId) setActiveNoteId(null);
   };
 
+  const [profileError, setProfileError] = useState('');
+
   const handleSaveProfile = () => {
     if (!uid) return;
+    if (isRestrictedRole(editRole)) {
+      setProfileError('Admin and Super Admin roles cannot be self-assigned. Contact your administrator.');
+      return;
+    }
+    setProfileError('');
     update(dbRef(db, `users/${uid}`), { bio: editBio, role: editRole });
     localStorage.setItem('eatclub_bio', editBio);
     localStorage.setItem('eatclub_role', editRole);
@@ -215,30 +221,37 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
         .dash-card { background:${S.SV};border-radius:16px;padding:20px;border:1px solid ${S.Out};margin-bottom:16px }
         .dash-card-title { font-size:15px;font-weight:800;color:${S.OnS};margin-bottom:14px;display:flex;align-items:center;gap:10px }
         
-        /* Keep Masonry Grid */
-        .keep-grid { column-count: auto; column-width: 240px; column-gap: 16px; width: 100% }
-        .keep-note-wrapper { break-inside: avoid; margin-bottom: 16px; transition: transform .2s ease }
-        .keep-note-wrapper:hover { transform: translateY(-2px) }
+        /* Notes Grid — responsive CSS grid (left-to-right) */
+        .notes-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;width:100% }
+        .notes-note-wrapper { transition: transform .2s ease, box-shadow .2s ease }
+        .notes-note-wrapper:hover { transform: translateY(-3px) }
         
-        .note-card { border-radius:12px;padding:14px;cursor:pointer;transition:all .2s;position:relative;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,.1);box-shadow: 0 1px 3px rgba(0,0,0,0.2) }
-        .note-card:hover { box-shadow:0 4px 12px rgba(0,0,0,.3); border-color: rgba(255,255,255,0.2) }
-        .note-card.active { border-color:${S.P}; box-shadow:0 0 0 1px ${S.P} }
-        .note-card-title { font-size:15px;font-weight:700;margin-bottom:8px;word-wrap:break-word; color: #f1f3f4 }
-        .note-card-preview { font-size:13px;line-height:1.5;flex:1;word-wrap:break-word; color: #e8eaed }
-        .note-card-date { font-size:10px;opacity:.6;margin-top:12px;text-align:right }
+        .note-card { border-radius:14px;padding:18px;cursor:pointer;transition:all .25s cubic-bezier(.34,1.56,.64,1);position:relative;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,.12);box-shadow:0 2px 8px rgba(0,0,0,0.18) }
+        .note-card:hover { box-shadow:0 8px 24px rgba(0,0,0,.28); border-color: rgba(255,255,255,0.25) }
+        .note-card.active { border-color:${S.P}; box-shadow:0 0 0 2px ${S.P} }
+        .note-card-title { font-size:15px;font-weight:700;margin-bottom:10px;word-wrap:break-word;line-height:1.3 }
+        .note-card-preview { font-size:13px;line-height:1.6;flex:1;word-wrap:break-word;opacity:.85;overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical }
+        .note-card-date { font-size:10px;opacity:.5;margin-top:14px;text-align:right;font-weight:600;letter-spacing:.2px }
         
-        .keep-input-container { max-width: 600px; margin: 0 auto 32px; background: ${S.SV}; border-radius: 8px; border: 1px solid ${S.Out}; box-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: all .2s }
-        .keep-input-container:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.4) }
-        .keep-input-placeholder { padding: 12px 16px; color: ${S.OnSV}; font-weight: 700; cursor: pointer; font-size: 14px }
+        .notes-search { display:flex;align-items:center;gap:10px;margin-bottom:20px;padding:10px 16px;border-radius:12px;background:${S.SV};border:1px solid ${S.Out};transition:all .2s;max-width:400px }
+        .notes-search:focus-within { border-color:${S.P};box-shadow:0 0 0 3px rgba(${S.Prgb},.1) }
+        .notes-search input { flex:1;border:none;background:none;color:${S.OnS};font-size:13px;font-weight:600;outline:none }
+        .notes-search input::placeholder { color:${S.OnSV};font-weight:500 }
+        .notes-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px }
+        .notes-count { font-size:11px;color:${S.OnSV};font-weight:600;padding:4px 12px;border-radius:100px;background:${S.S};border:1px solid ${S.Out} }
         
-        .note-editor-title { width:100%;padding:10px 14px;border-radius:10px;border:1px solid ${S.Out};background:${S.S};color:${S.OnS};font-size:16px;font-weight:700;margin-bottom:12px }
+        .keep-input-container { max-width: 600px; margin: 0 auto 28px; background: ${S.SV}; border-radius: 12px; border: 1px solid ${S.Out}; box-shadow: 0 1px 3px rgba(0,0,0,0.25); transition: all .2s }
+        .keep-input-container:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.35); border-color:rgba(${S.Prgb},.2) }
+        .keep-input-placeholder { padding: 14px 18px; color: ${S.OnSV}; font-weight: 700; cursor: pointer; font-size: 14px; display:flex;align-items:center;gap:10px }
+        
+        .note-editor-title { width:100%;padding:10px 14px;border-radius:10px;border:1px solid ${S.Out};background:${S.S};color:${S.OnS};font-size:16px;font-weight:700;margin-bottom:12px;transition:border-color .2s }
         .note-editor-title:focus { outline:none;border-color:${S.P} }
-        .note-editor-body { width:100%;min-height:300px;border-radius:8px;padding:14px;background:${S.S};border:1px solid ${S.Out};color:${S.OnS};font-size:14px;line-height:1.6;outline:none }
-        .note-editor-body:focus { border-color:${S.P} }
-        .note-toolbar { display:flex;align-items:center;gap:4px;padding:8px 10px;background:${S.SV};border:1px solid ${S.Out};border-radius:8px 8px 0 0; border-bottom: none }
-        .note-tb-btn { width:30px;height:28px;border:none;border-radius:6px;background:none;color:${S.OnSV};cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;font-size:13px }
-        .note-tb-btn:hover { background:rgba(${S.Prgb},.1);color:${S.P} }
-        .note-tb-sep { width:1px;height:16px;background:${S.Out};margin:0 2px }
+        .note-editor-body { width:100%;min-height:200px;border-radius:8px;padding:14px;background:transparent;border:none;color:inherit;font-size:14px;line-height:1.7;outline:none }
+        .note-editor-body:focus { }
+        .note-toolbar { display:flex;align-items:center;gap:4px;padding:8px 10px;background:rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.08);border-radius:10px 10px 0 0; border-bottom: none;flex-wrap:wrap }
+        .note-tb-btn { width:32px;height:30px;border:none;border-radius:8px;background:none;color:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;font-size:13px;opacity:.7 }
+        .note-tb-btn:hover { background:rgba(0,0,0,.08);opacity:1 }
+        .note-tb-sep { width:1px;height:18px;background:rgba(0,0,0,.1);margin:0 4px;flex-shrink:0 }
         .profile-field { width:100%;padding:12px 14px;border-radius:12px;background:${S.S};border:1px solid ${S.Out};color:${S.OnS};font-size:13px;margin-bottom:12px }
         .profile-field:focus { outline:none;border-color:${S.P} }
         .lb-item { display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:14px;background:${S.S};border:1px solid ${S.Out};margin-bottom:8px;transition:all .2s }
@@ -363,15 +376,7 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
           {!editingProfile ? (
             <>
               <div style={{ display:'flex',alignItems:'center',gap:16,marginBottom:20 }}>
-                <div style={{ width:64,height:64,borderRadius:'50%',overflow:'hidden',flexShrink:0,background:`linear-gradient(135deg,${S.P},#FF8F00)` }}>
-                  {user?.photoURL ? (
-                    <img src={user.photoURL} alt="" style={{ width:'100%',height:'100%',objectFit:'cover' }} />
-                  ) : (
-                    <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,fontWeight:900,color:'#fff' }}>
-                      {userEmail.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </div>
+                <UserAvatar size="xl" name={userName} photoURL={user?.photoURL} />
                 <div>
                   <div style={{ fontSize:18,fontWeight:900,color:S.OnS }}>{userName}</div>
                   <div style={{ fontSize:12,color:S.OnSV,fontWeight:600 }}>{userEmail}</div>
@@ -421,6 +426,7 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
                         const newChoice = { type: 'emoji', value: emoji, bg: avatarChoice.bg || AVATAR_GRADIENTS[0] };
                         setAvatarChoice(newChoice);
                         localStorage.setItem('eatclub_avatar', JSON.stringify(newChoice));
+                        notifyAvatarChange();
                       }}
                         style={{
                           width: 32, height: 32, borderRadius: '50%', border: avatarChoice.value === emoji ? '2px solid var(--md-primary)' : '1px solid var(--md-outline)',
@@ -434,6 +440,7 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
                       const newChoice = { type: 'letter', bg: avatarChoice.bg || AVATAR_GRADIENTS[0] };
                       setAvatarChoice(newChoice);
                       localStorage.setItem('eatclub_avatar', JSON.stringify(newChoice));
+                      notifyAvatarChange();
                     }}
                       style={{
                         width: 32, height: 32, borderRadius: '50%', border: avatarChoice.type === 'letter' || (!avatarChoice.type && !user?.photoURL) ? '2px solid var(--md-primary)' : '1px solid var(--md-outline)',
@@ -447,6 +454,7 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
                         const newChoice = { type: 'google' };
                         setAvatarChoice(newChoice);
                         localStorage.setItem('eatclub_avatar', JSON.stringify(newChoice));
+                        notifyAvatarChange();
                       }}
                         style={{
                           width: 32, height: 32, borderRadius: '50%', border: avatarChoice.type === 'google' ? '2px solid var(--md-primary)' : '1px solid var(--md-outline)',
@@ -463,6 +471,7 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
                         const newChoice = { ...avatarChoice, bg: grad };
                         setAvatarChoice(newChoice);
                         localStorage.setItem('eatclub_avatar', JSON.stringify(newChoice));
+                        notifyAvatarChange();
                       }}
                         style={{
                           width: 22, height: 22, borderRadius: '50%', border: avatarChoice.bg === grad ? '2px solid var(--md-primary)' : '1px solid var(--md-outline)',
@@ -476,12 +485,31 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
               <div style={{ fontSize:12,fontWeight:700,color:S.OnSV,marginBottom:8 }}>Bio</div>
               <textarea className="profile-field" value={editBio} onChange={e => setEditBio(e.target.value)} placeholder="Tell us about yourself..." rows={3} />
               <div style={{ fontSize:12,fontWeight:700,color:S.OnSV,marginBottom:8 }}>Role / Position</div>
-              <select className="profile-field" value={ROLE_OPTIONS.includes(editRole) ? editRole : 'Custom'} onChange={e => { const v = e.target.value; if (v === 'Custom') { setShowCustomRole(true); setEditRole(''); } else { setShowCustomRole(false); setEditRole(v); } }} style={{ cursor:'pointer',appearance:'auto' }}>
+              <select
+                id="dash-profile-role"
+                className="profile-field"
+                value={SIGNUP_ROLES.includes(editRole) ? editRole : 'Custom'}
+                onChange={e => {
+                  const v = e.target.value;
+                  setProfileError('');
+                  if (v === 'Custom') { setShowCustomRole(true); setEditRole(''); }
+                  else { setShowCustomRole(false); setEditRole(v); }
+                }}
+                style={{ cursor:'pointer',appearance:'auto' }}
+                aria-describedby={profileError ? 'profile-role-error' : undefined}
+                aria-invalid={!!profileError}
+              >
                 <option value="" disabled>Select your role</option>
-                {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                {SIGNUP_ROLES.map(r => r !== 'Custom' && <option key={r} value={r}>{r}</option>)}
               </select>
               {showCustomRole && (
-                <input className="profile-field" value={editRole} onChange={e => setEditRole(e.target.value)} placeholder="Enter your custom role..." style={{ marginTop:8 }} />
+                <input className="profile-field" value={editRole} onChange={e => { setEditRole(e.target.value); setProfileError(''); }} placeholder="Enter your custom role..." style={{ marginTop:8 }} aria-label="Custom role" />
+              )}
+              {profileError && (
+                <div id="profile-role-error" role="alert" style={{ fontSize: 11, color: '#E91E63', marginTop: 4, marginBottom: 8, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>error</span>
+                  {profileError}
+                </div>
               )}
               <div style={{ display:'flex',gap:8 }}>
                 <button onClick={handleSaveProfile} style={{ padding:'10px 24px',borderRadius:100,border:'none',background:S.P,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer' }}>
@@ -495,55 +523,57 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
         </div>
       )}
 
-      {/* ═══ NOTES — Google Keep Redesign ═══ */}
+      {/* ═══ NOTES — Polished Notepad ═══ */}
       {activeTab === 'notes' && (
         <div style={{ position: 'relative' }}>
           {/* Take a note bar */}
           <div className="keep-input-container" onClick={createNewNote}>
-            <div className="keep-input-placeholder">Take a note...</div>
+            <div className="keep-input-placeholder">
+              <span className="material-symbols-outlined" style={{ fontSize:18,opacity:.5 }}>lightbulb</span>
+              Take a note...
+            </div>
           </div>
 
-          {/* Note Editor Overlay (Keep Style) */}
+          {/* Search + count */}
+          <div className="notes-header">
+            <div className="notes-search">
+              <span className="material-symbols-outlined" style={{ fontSize:16,color:S.OnSV }}>search</span>
+              <input value={noteSearch} onChange={e => setNoteSearch(e.target.value)} placeholder="Search notes..." />
+              {noteSearch && (
+                <span className="material-symbols-outlined" style={{ fontSize:16,color:S.OnSV,cursor:'pointer' }}
+                  onClick={() => setNoteSearch('')}>close</span>
+              )}
+            </div>
+            <span className="notes-count">{savedNotes.filter(n => !noteSearch || stripHtml(n.title + ' ' + n.content).toLowerCase().includes(noteSearch.toLowerCase())).length} / {savedNotes.length} notes</span>
+          </div>
+
+          {/* Note Editor Overlay */}
           {activeNoteId && (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+            <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:20,backdropFilter:'blur(4px)' }}
               onClick={() => setActiveNoteId(null)}>
-              <div className="dash-card" style={{ width: '100%', maxWidth: 600, background: noteColor, color: '#1a1a1a', padding: 0, overflow: 'hidden' }}
+              <div style={{ width:'100%',maxWidth:620,background:noteColor,borderRadius:16,overflow:'hidden',boxShadow:'0 24px 80px rgba(0,0,0,0.5)' }}
                 onClick={e => e.stopPropagation()}>
-                <div style={{ padding: 16 }}>
-                  <input className="note-editor-title" value={noteTitle} onChange={e => handleNoteChange('title', e.target.value)} 
-                    placeholder="Title" style={{ background: 'transparent', border: 'none', color: 'inherit' }} />
-                  <div style={{ display: 'flex', gap: 4, marginBottom: 8, padding: '6px 0', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-                    <button onMouseDown={e => { e.preventDefault(); document.execCommand('bold', false); }}
-                      style={{ width: 30, height: 30, borderRadius: 6, border: 'none', background: 'rgba(0,0,0,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 13, color: '#1a1a1a' }} title="Bold">
-                      <b>B</b>
-                    </button>
+                <div style={{ padding:'18px 20px 14px' }}>
+                  <input className="note-editor-title" value={noteTitle} onChange={e => handleNoteChange('title', e.target.value)}
+                    placeholder="Title" style={{ background:'transparent',border:'none',color:'inherit',fontSize:18 }} />
+                  {/* Toolbar */}
+                  <div className="note-toolbar" style={{ color:noteTextColor(noteColor) }}>
+                    <button onMouseDown={e => { e.preventDefault(); document.execCommand('bold', false); document.execCommand('styleWithCSS', false, false); }}
+                      className="note-tb-btn" title="Bold"><b style={{fontSize:14}}>B</b></button>
                     <button onMouseDown={e => { e.preventDefault(); document.execCommand('italic', false); }}
-                      style={{ width: 30, height: 30, borderRadius: 6, border: 'none', background: 'rgba(0,0,0,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#1a1a1a' }} title="Italic">
-                      <i>I</i>
-                    </button>
-                    <span style={{ width: 1, background: 'rgba(0,0,0,0.1)', margin: '0 4px' }} />
-                    <button onMouseDown={e => { e.preventDefault(); document.execCommand('insertUnorderedList', false); }}
-                      style={{ width: 30, height: 30, borderRadius: 6, border: 'none', background: 'rgba(0,0,0,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#1a1a1a' }} title="Bullet list">
-                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>format_list_bulleted</span>
-                    </button>
-                    <button onMouseDown={e => { e.preventDefault(); document.execCommand('insertOrderedList', false); }}
-                      style={{ width: 30, height: 30, borderRadius: 6, border: 'none', background: 'rgba(0,0,0,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#1a1a1a' }} title="Numbered list">
-                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>format_list_numbered</span>
-                    </button>
-                    <span style={{ width: 1, background: 'rgba(0,0,0,0.1)', margin: '0 4px' }} />
-                    <button onMouseDown={e => { e.preventDefault(); document.execCommand('strikeThrough', false); }}
-                      style={{ width: 30, height: 30, borderRadius: 6, border: 'none', background: 'rgba(0,0,0,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#1a1a1a' }} title="Strikethrough">
-                      <span style={{ textDecoration: 'line-through' }}>S</span>
-                    </button>
+                      className="note-tb-btn" title="Italic"><i style={{fontSize:14}}>I</i></button>
                     <button onMouseDown={e => { e.preventDefault(); document.execCommand('underline', false); }}
-                      style={{ width: 30, height: 30, borderRadius: 6, border: 'none', background: 'rgba(0,0,0,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#1a1a1a' }} title="Underline">
-                      <span style={{ textDecoration: 'underline' }}>U</span>
-                    </button>
+                      className="note-tb-btn" title="Underline"><span style={{textDecoration:'underline',fontSize:14}}>U</span></button>
+                    <button onMouseDown={e => { e.preventDefault(); document.execCommand('strikeThrough', false); }}
+                      className="note-tb-btn" title="Strikethrough"><span style={{textDecoration:'line-through',fontSize:14}}>S</span></button>
+                    <span className="note-tb-sep" />
+                    <button onMouseDown={e => { e.preventDefault(); document.execCommand('insertUnorderedList', false); }}
+                      className="note-tb-btn" title="Bullet list"><span className="material-symbols-outlined" style={{fontSize:16}}>format_list_bulleted</span></button>
+                    <button onMouseDown={e => { e.preventDefault(); document.execCommand('insertOrderedList', false); }}
+                      className="note-tb-btn" title="Numbered list"><span className="material-symbols-outlined" style={{fontSize:16}}>format_list_numbered</span></button>
                   </div>
                   <div className="note-editor-body"
-                    contentEditable
-                    suppressContentEditableWarning
-                    ref={noteEditorRef}
+                    contentEditable suppressContentEditableWarning ref={noteEditorRef}
                     onInput={e => {
                       const html = e.currentTarget.innerHTML;
                       setNoteContent(html);
@@ -552,21 +582,28 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
                         saveNote(activeNoteId, { title: noteTitle, content: html, color: noteColor });
                       }, 800);
                     }}
-                    style={{ background: 'transparent', border: 'none', color: 'inherit', minHeight: 120 }}
+                    style={{ color: 'inherit', minHeight: 160, fontSize: 14, lineHeight: 1.7 }}
                   />
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:14 }}>
+                    <div style={{ display:'flex',gap:6,flexWrap:'wrap' }}>
                       {NOTE_COLORS.map(c => (
                         <div key={c} onClick={() => { setNoteColor(c); saveNote(activeNoteId, { title: noteTitle, content: noteContent, color: c }); }}
-                          style={{ width: 24, height: 24, borderRadius: '50%', background: c, cursor: 'pointer', border: c === noteColor ? `2px solid rgba(0,0,0,0.5)` : '1px solid rgba(0,0,0,0.1)' }} />
+                          style={{ width:26,height:26,borderRadius:'50%',background:c,cursor:'pointer',
+                            border:c===noteColor ? `2px solid ${noteTextColor(c)}` : '1px solid rgba(0,0,0,.12)',
+                            boxShadow:c===noteColor ? `0 0 0 2px ${c}` : 'none',transition:'all .15s' }} />
                       ))}
                     </div>
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                      <span style={{ fontSize: 11, color: noteSaved ? 'rgba(0,0,0,0.5)' : '#d32f2f' }}>{noteSaved ? 'Saved' : 'Saving...'}</span>
-                      <button onClick={() => deleteNote(activeNoteId)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(0,0,0,0.6)' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 20 }}>delete</span>
+                    <div style={{ display:'flex',gap:10,alignItems:'center' }}>
+                      <span style={{ fontSize:11,fontWeight:600,color:noteSaved ? 'rgba(0,0,0,.45)' : '#d32f2f',transition:'color .3s' }}>{noteSaved ? 'Saved' : 'Saving...'}</span>
+                      <button onClick={() => deleteNote(activeNoteId)}
+                        style={{ width:32,height:32,borderRadius:8,border:'none',background:'rgba(0,0,0,.06)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'inherit',opacity:.6,transition:'all .15s' }}
+                        title="Delete note">
+                        <span className="material-symbols-outlined" style={{fontSize:18}}>delete</span>
                       </button>
-                      <button onClick={() => setActiveNoteId(null)} style={{ padding: '6px 16px', borderRadius: 4, border: 'none', background: 'rgba(0,0,0,0.1)', fontWeight: 700, cursor: 'pointer' }}>Close</button>
+                      <button onClick={() => setActiveNoteId(null)}
+                        style={{ padding:'7px 18px',borderRadius:8,border:'none',background:'rgba(0,0,0,.08)',fontWeight:700,cursor:'pointer',fontSize:12,color:'inherit',transition:'all .15s' }}>
+                        Close
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -574,23 +611,32 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
             </div>
           )}
 
-          {/* Masonry Grid */}
-          <div className="keep-grid">
-            {savedNotes.map(n => (
-              <div key={n.id} className="keep-note-wrapper">
-                <div className="note-card" style={{ background: n.color || NOTE_COLORS[0], color: '#1a1a1a' }} onClick={() => selectNote(n)}>
-                  {n.title && <div className="note-card-title" style={{ color: '#1a1a1a' }}>{n.title}</div>}
-                  <div className="note-card-preview" style={{ color: '#1a1a1a' }} dangerouslySetInnerHTML={{ __html: n.content || '' }} />
-                  <div className="note-card-date" style={{ color: 'rgba(0,0,0,0.5)' }}>{formatTime(n.updatedAt)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {savedNotes.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '80px 20px', color: S.OnSV }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 64, opacity: 0.3, marginBottom: 16 }}>lightbulb</span>
-              <div style={{ fontSize: 18, fontWeight: 700 }}>Notes you add appear here</div>
+          {/* Notes Grid */}
+          {savedNotes.filter(n => !noteSearch || stripHtml(n.title + ' ' + n.content).toLowerCase().includes(noteSearch.toLowerCase())).length === 0 ? (
+            <div style={{ textAlign:'center',padding:'60px 20px',color:S.OnSV }}>
+              <span className="material-symbols-outlined" style={{ fontSize:56,opacity:.2,marginBottom:12 }}>{noteSearch ? 'search_off' : 'lightbulb'}</span>
+              <div style={{ fontSize:16,fontWeight:700 }}>{noteSearch ? 'No notes match your search' : 'Notes you add appear here'}</div>
+              <div style={{ fontSize:12,opacity:.6,marginTop:4 }}>{noteSearch ? 'Try a different keyword' : 'Tap "Take a note..." above to get started'}</div>
+            </div>
+          ) : (
+            <div className="notes-grid">
+              {savedNotes
+                .filter(n => !noteSearch || stripHtml(n.title + ' ' + n.content).toLowerCase().includes(noteSearch.toLowerCase()))
+                .map(n => {
+                  const tc = noteTextColor(n.color || NOTE_COLORS[0]);
+                  return (
+                    <div key={n.id} className="notes-note-wrapper">
+                      <div className="note-card" style={{ background: n.color || NOTE_COLORS[0], color: tc }}
+                        onClick={() => selectNote(n)}>
+                        {n.title && <div className="note-card-title" style={{ color: tc }}>{n.title}</div>}
+                        <div className="note-card-preview" style={{ color: tc }}>
+                          {stripHtml(n.content) || <span style={{opacity:.4}}>No content</span>}
+                        </div>
+                        <div className="note-card-date" style={{ color: tc }}>{formatTime(n.updatedAt)}</div>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           )}
         </div>
@@ -615,15 +661,7 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
                 <div key={member.id} className="lb-item" style={{ ...(isMe ? { borderColor:S.P,background:`rgba(${S.Prgb},.05)` } : {}), cursor:'pointer' }}
                   onClick={() => setSelectedUser(member)}>
                   <div className="lb-rank" style={{ background: idx < 3 ? rankColor+'22' : S.SV, color: rankColor }}>{idx+1}</div>
-                  <div style={{ width:36,height:36,borderRadius:'50%',overflow:'hidden',flexShrink:0,background:`linear-gradient(135deg,${S.P},#FF8F00)` }}>
-                    {member.photoURL ? (
-                      <img src={member.photoURL} alt="" style={{ width:'100%',height:'100%',objectFit:'cover' }} />
-                    ) : (
-                      <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:900,color:'#fff' }}>
-                        {(member.name||'?').charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
+                  <UserAvatar size={36} name={member.name} photoURL={member.photoURL} />
                   <div style={{ flex:1,minWidth:0 }}>
                     <div style={{ fontSize:13,fontWeight:800,color:S.OnS,display:'flex',alignItems:'center',gap:6 }}>
                       {member.name}{isMe && <span style={{ fontSize:8,padding:'1px 6px',borderRadius:6,background:S.P,color:'#fff',fontWeight:800 }}>YOU</span>}
@@ -647,15 +685,7 @@ export default function UserDashboard({ user, userProfile, onUpdateProfile, onLo
           <div className="contact-card" onClick={e => e.stopPropagation()} style={{ maxWidth:520, background:S.S, borderRadius:20, overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 24px 64px rgba(0,0,0,.55)' }}>
             {/* Header */}
             <div style={{ display:'flex', alignItems:'center', gap:14, padding:'16px 20px', borderBottom:`1px solid ${S.Out}` }}>
-              <div style={{ width:44,height:44,borderRadius:'50%',overflow:'hidden',flexShrink:0,background:`linear-gradient(135deg,${S.P},#FF8F00)` }}>
-                {selectedUser.photoURL ? (
-                  <img src={selectedUser.photoURL} alt="" style={{ width:'100%',height:'100%',objectFit:'cover' }} />
-                ) : (
-                  <div style={{ width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:900,color:'#fff' }}>
-                    {(selectedUser.name||'?').charAt(0).toUpperCase()}
-                  </div>
-                )}
-              </div>
+              <UserAvatar size="lg" name={selectedUser.name} photoURL={selectedUser.photoURL} />
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:15,fontWeight:800,color:S.OnS }}>{selectedUser.name}</div>
                 <div style={{ fontSize:11,color:S.OnSV }}>{selectedUser.role||'Member'} · {selectedUser.email||''}</div>
