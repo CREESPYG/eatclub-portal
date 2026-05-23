@@ -104,6 +104,7 @@ export default function AdminDashboard({ user }) {
 
   const userEmail = user?.email || localStorage.getItem('eatclub_agent_email') || '';
   const uid = user?.uid || localStorage.getItem('eatclub_uid');
+  const isMain = isMainAdmin(userEmail);
 
   const logAction = useAdminLog(user, uid);
 
@@ -438,11 +439,18 @@ export default function AdminDashboard({ user }) {
                   <div style={{ fontSize:11,color:S.OnSV,marginTop:1 }}>{videos.length} video{videos.length!==1?'s':''} · Manage training video links shown on Home</div>
                 </div>
               </div>
-              <button onClick={() => { setVideoForm({ title:'',duration:'',url:'' }); setEditingVideoId(null); setShowVideoForm(true) }}
-                className="admin-tab" style={{ padding:'8px 18px',background:S.P,color:'#fff',border:'none' }}>
-                <span className="material-symbols-outlined" style={{ fontSize:14 }}>add</span>
-                Add Video
-              </button>
+              {isMain ? (
+                <button onClick={() => { setVideoForm({ title:'',duration:'',url:'' }); setEditingVideoId(null); setShowVideoForm(true) }}
+                  className="admin-tab" style={{ padding:'8px 18px',background:S.P,color:'#fff',border:'none' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize:14 }}>add</span>
+                  Add Video
+                </button>
+              ) : (
+                <div style={{ display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:100,background:'rgba(var(--md-primary-rgb),.06)',border:'1px solid rgba(var(--md-primary-rgb),.12)',fontSize:11,color:S.P,fontWeight:700 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize:14 }}>visibility</span>
+                  View-only
+                </div>
+              )}
             </div>
           </div>
 
@@ -452,7 +460,7 @@ export default function AdminDashboard({ user }) {
               <div style={{ textAlign:'center',padding:'60px 20px',color:S.OnSV }}>
                 <span className="material-symbols-outlined" style={{ fontSize:48,opacity:.2,marginBottom:12 }}>videocam</span>
                 <div style={{ fontSize:16,fontWeight:700,color:S.OnS }}>No training videos yet</div>
-                <div style={{ fontSize:12,marginTop:4,opacity:.6 }}>Click "Add Video" to add training video links for agents</div>
+                <div style={{ fontSize:12,marginTop:4,opacity:.6 }}>{isMain ? 'Click "Add Video" to add training video links for agents' : 'Videos will appear here once added by the main admin.'}</div>
               </div>
             ) : (
               <div style={{ display:'flex',flexDirection:'column' }}>
@@ -495,25 +503,29 @@ export default function AdminDashboard({ user }) {
                         title="Preview video">
                         <span className="material-symbols-outlined" style={{ fontSize:16 }}>visibility</span>
                       </button>
-                      <button onClick={() => { setVideoForm({ title:v.title,duration:v.duration,url:v.url }); setEditingVideoId(v.id); setShowVideoForm(true) }}
-                        style={{ width:32,height:32,borderRadius:8,border:'1px solid '+S.Out,background:S.SV,color:S.OnS,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = S.P; e.currentTarget.style.color = S.P }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = S.Out; e.currentTarget.style.color = S.OnS }}
-                        title="Edit video">
-                        <span className="material-symbols-outlined" style={{ fontSize:16 }}>edit</span>
-                      </button>
-                      <button onClick={() => {
-                        if (!confirm('Delete "'+v.title+'"?')) return;
-                        remove(dbRef(db, 'trainingVideos/' + v.id)).catch(() => null);
-                        setVideoToast('Video deleted');
-                        setTimeout(() => setVideoToast(null), 2000);
-                      }}
-                        style={{ width:32,height:32,borderRadius:8,border:'1px solid rgba(233,30,99,.2)',background:'rgba(233,30,99,.06)',color:'#E91E63',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(233,30,99,.12)' }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(233,30,99,.06)' }}
-                        title="Delete video">
-                        <span className="material-symbols-outlined" style={{ fontSize:16 }}>delete</span>
-                      </button>
+                      {isMain && (
+                        <>
+                          <button onClick={() => { setVideoForm({ title:v.title,duration:v.duration,url:v.url }); setEditingVideoId(v.id); setShowVideoForm(true) }}
+                            style={{ width:32,height:32,borderRadius:8,border:'1px solid '+S.Out,background:S.SV,color:S.OnS,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s' }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = S.P; e.currentTarget.style.color = S.P }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = S.Out; e.currentTarget.style.color = S.OnS }}
+                            title="Edit video">
+                            <span className="material-symbols-outlined" style={{ fontSize:16 }}>edit</span>
+                          </button>
+                          <button onClick={() => {
+                            if (!confirm('Delete "'+v.title+'"?')) return;
+                            remove(dbRef(db, 'trainingVideos/' + v.id)).catch(() => null);
+                            setVideoToast('Video deleted');
+                            setTimeout(() => setVideoToast(null), 2000);
+                          }}
+                            style={{ width:32,height:32,borderRadius:8,border:'1px solid rgba(233,30,99,.2)',background:'rgba(233,30,99,.06)',color:'#E91E63',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(233,30,99,.12)' }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(233,30,99,.06)' }}
+                            title="Delete video">
+                            <span className="material-symbols-outlined" style={{ fontSize:16 }}>delete</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -523,8 +535,8 @@ export default function AdminDashboard({ user }) {
         </div>
       )}
 
-      {/* VIDEO FORM MODAL */}
-      {showVideoForm && (
+      {/* VIDEO FORM MODAL (main admin only) */}
+      {showVideoForm && isMain && (
         <div className="user-detail-overlay" onClick={() => setShowVideoForm(false)} style={{ backdropFilter:'blur(4px)' }}>
           <div className="user-detail-modal" onClick={e => e.stopPropagation()} style={{ maxWidth:480,overflow:'hidden',borderRadius:20 }}>
             <div style={{ padding:'20px 24px',background:'linear-gradient(135deg,'+S.P+',rgba(var(--md-primary-rgb),.85))',color:'#fff' }}>
