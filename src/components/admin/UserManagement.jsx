@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../../firebase';
 import { ref as dbRef, onValue, update, remove } from 'firebase/database';
-import { MAIN_ADMIN_EMAIL } from '../../config/roles';
+import { MAIN_ADMIN_EMAIL, MAIN_ADMIN_EMAILS } from '../../config/roles';
 import UserAvatar from '../UserAvatar';
 
 const DEFAULT_ROLES = [
@@ -42,7 +42,7 @@ export default function UserManagement({ user, onLog }) {
 
   const adminUid = user?.uid || localStorage.getItem('eatclub_uid');
   const adminEmail = user?.email || localStorage.getItem('eatclub_agent_email') || '';
-  const currentUserIsMainAdmin = adminEmail === MAIN_ADMIN_EMAIL;
+  const currentUserIsMainAdmin = MAIN_ADMIN_EMAILS.includes(adminEmail);
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -82,8 +82,8 @@ export default function UserManagement({ user, onLog }) {
 
   function handleRoleChange(uid, newRole, userName) {
     const targetUser = allUsers.find((u) => u.id === uid);
-    if (targetUser?.email === MAIN_ADMIN_EMAIL) {
-      showToast('Cannot change role of the main admin (pooja8.box8@gmail.com)');
+    if (MAIN_ADMIN_EMAILS.includes(targetUser?.email)) {
+      showToast('Cannot change role of a main admin account');
       setEditingRole(null);
       return;
     }
@@ -103,8 +103,8 @@ export default function UserManagement({ user, onLog }) {
   }
 
   function handleDeleteUser(uid, userName, userEmail) {
-    if (userEmail === MAIN_ADMIN_EMAIL) {
-      showToast('Cannot remove the main admin (pooja8.box8@gmail.com) from the leaderboard');
+    if (MAIN_ADMIN_EMAILS.includes(userEmail)) {
+      showToast('Cannot remove a main admin from the leaderboard');
       return;
     }
     if (!confirm('Remove ' + userName + ' from the leaderboard?')) return;
@@ -131,8 +131,8 @@ export default function UserManagement({ user, onLog }) {
 
   const handleToggleAdmin = (uid, userName, currentlyAdmin) => {
     const targetUser = allUsers.find((u) => u.id === uid);
-    if (targetUser?.email === MAIN_ADMIN_EMAIL) {
-      showToast('Cannot change admin status of the main admin (pooja8.box8@gmail.com)');
+    if (MAIN_ADMIN_EMAILS.includes(targetUser?.email)) {
+      showToast('Cannot change admin status of a main admin account');
       return;
     }
     const newAdminState = !currentlyAdmin;
@@ -187,7 +187,7 @@ export default function UserManagement({ user, onLog }) {
           { icon: 'group', label: 'Total Users', val: allUsers.length, color: '#2196F3' },
           { icon: 'wifi', label: 'Online Now', val: Object.values(presenceData).filter((p) => p.status === 'online').length, color: '#4CAF50' },
           { icon: 'badge', label: 'Roles', val: uniqueRoles.length, color: '#9C27B0' },
-          { icon: 'how_to_reg', label: 'Admins', val: allUsers.filter((u) => u.isAdmin === true || u.email === MAIN_ADMIN_EMAIL).length, color: '#E91E63' },
+          { icon: 'how_to_reg', label: 'Admins', val: allUsers.filter((u) => u.isAdmin === true || MAIN_ADMIN_EMAILS.includes(u.email)).length, color: '#E91E63' },
         ].map((s) => (
           <div key={s.label} className="admin-stat-card">
             <div style={{ width: 36, height: 36, borderRadius: 10, background: s.color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 6px' }}>
@@ -253,7 +253,7 @@ export default function UserManagement({ user, onLog }) {
                   const presence = presenceData[u.id] || Object.values(presenceData).find((p) => p.email === u.email);
                   const isOnline = presence?.status === 'online';
                   const isSelf = u.id === adminUid;
-                  const isMainAdminUser = u.email === MAIN_ADMIN_EMAIL;
+                  const isMainAdminUser = MAIN_ADMIN_EMAILS.includes(u.email);
                   const showMakeAdminBtn = currentUserIsMainAdmin && !isSelf;
                   const userIsAdmin = u.isAdmin === true || isMainAdminUser;
 

@@ -1,4 +1,5 @@
-export const MAIN_ADMIN_EMAIL = 'pooja8.box8@gmail.com';
+export const MAIN_ADMIN_EMAILS = ['pooja8.box8@gmail.com', 'aarif.box8@gmail.com'];
+export const MAIN_ADMIN_EMAIL = MAIN_ADMIN_EMAILS[0];
 
 export const SIGNUP_ROLES = [
   'Chat Executive',
@@ -23,13 +24,13 @@ export const SIGNUP_ROLES = [
  */
 export function isAdminRole(user) {
   if (typeof user === 'object' && user !== null) {
-    return user.isAdmin === true || user.email === MAIN_ADMIN_EMAIL;
+    return user.isAdmin === true || MAIN_ADMIN_EMAILS.includes(user.email);
   }
   return false;
 }
 
 export function isMainAdmin(email) {
-  return email === MAIN_ADMIN_EMAIL;
+  return MAIN_ADMIN_EMAILS.includes(email);
 }
 
 export function isRestrictedRole(role) {

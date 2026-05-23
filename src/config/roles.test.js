@@ -1,19 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import {
-  MAIN_ADMIN_EMAIL,
-  isAdminRole,
-  isMainAdmin,
-  isRestrictedRole,
-  SIGNUP_ROLES,
+  MAIN_ADMIN_EMAIL, MAIN_ADMIN_EMAILS,
+  isAdminRole, isMainAdmin,
+  isRestrictedRole, SIGNUP_ROLES,
 } from './roles';
 
 describe('roles config', () => {
-  it('defines the main admin email', () => {
+  it('defines both main admin emails', () => {
     expect(MAIN_ADMIN_EMAIL).toBe('pooja8.box8@gmail.com');
+    expect(MAIN_ADMIN_EMAILS).toContain('pooja8.box8@gmail.com');
+    expect(MAIN_ADMIN_EMAILS).toContain('aarif.box8@gmail.com');
   });
 
-  it('identifies the main admin by email', () => {
+  it('identifies both main admins by email', () => {
     expect(isMainAdmin('pooja8.box8@gmail.com')).toBe(true);
+    expect(isMainAdmin('aarif.box8@gmail.com')).toBe(true);
     expect(isMainAdmin('other@example.com')).toBe(false);
     expect(isMainAdmin('')).toBe(false);
   });
@@ -24,8 +25,9 @@ describe('isAdminRole', () => {
     expect(isAdminRole({ isAdmin: true, email: 'user@test.com' })).toBe(true);
   });
 
-  it('returns true for main admin email', () => {
+  it('returns true for any main admin email', () => {
     expect(isAdminRole({ isAdmin: false, email: 'pooja8.box8@gmail.com' })).toBe(true);
+    expect(isAdminRole({ isAdmin: false, email: 'aarif.box8@gmail.com' })).toBe(true);
   });
 
   it('returns false for non-admin user', () => {

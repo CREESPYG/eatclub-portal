@@ -35,7 +35,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import NoticeBoardPage from './pages/NoticeBoard';
 
 import { db, auth } from './firebase';
-import { MAIN_ADMIN_EMAIL, isAdminRole } from './config/roles';
+import { MAIN_ADMIN_EMAILS, isAdminRole } from './config/roles';
 import { ref as dbRef, set, push, onValue, onDisconnect, serverTimestamp, remove, update } from 'firebase/database';
 import { signInAnonymously, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import { pinTeamMessage, listenUserConversations } from './services/messaging';
@@ -755,7 +755,7 @@ export default function App() {
 
       // Save user profile to Firebase (for leaderboard & profile sync)
       if (userData.uid) {
-        const autoRole = userData.email === MAIN_ADMIN_EMAIL ? 'Admin' : (existingRole || '');
+        const autoRole = MAIN_ADMIN_EMAILS.includes(userData.email) ? 'Admin' : (existingRole || '');
         set(dbRef(db, 'users/' + userData.uid), {
           name: userData.displayName,
           email: userData.email,
