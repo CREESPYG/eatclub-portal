@@ -99,7 +99,7 @@ export default function AdminDashboard({ user }) {
   const [videoForm, setVideoForm] = useState({ title: '', duration: '', url: '' });
   const [editingVideoId, setEditingVideoId] = useState(null);
   const [showVideoForm, setShowVideoForm] = useState(false);
-  const [videoToast, setVideoToast] = useState(null);
+  const [videoToast, setVideoToast] = useState(null); // { message, type } or null
   const [previewVideo, setPreviewVideo] = useState(null);
 
   const userEmail = user?.email || localStorage.getItem('eatclub_agent_email') || '';
@@ -515,7 +515,7 @@ export default function AdminDashboard({ user }) {
                           <button onClick={() => {
                             if (!confirm('Delete "'+v.title+'"?')) return;
                             remove(dbRef(db, 'trainingVideos/' + v.id)).catch(() => null);
-                            setVideoToast('Video deleted');
+                            setVideoToast({ message: 'Video deleted', type: 'success', centered: true });
                             setTimeout(() => setVideoToast(null), 2000);
                           }}
                             style={{ width:32,height:32,borderRadius:8,border:'1px solid rgba(233,30,99,.2)',background:'rgba(233,30,99,.06)',color:'#E91E63',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s' }}
@@ -608,7 +608,7 @@ export default function AdminDashboard({ user }) {
                 </button>
                 <button onClick={() => {
                   if (!videoForm.title.trim() || !videoForm.url.trim()) {
-                    setVideoToast('Title and URL are required');
+                    setVideoToast({ message: 'Title and URL are required', type: 'error' });
                     setTimeout(() => setVideoToast(null), 2000);
                     return;
                   }
@@ -621,10 +621,10 @@ export default function AdminDashboard({ user }) {
                   };
                   if (editingVideoId) {
                     update(dbRef(db, 'trainingVideos/' + editingVideoId), videoData).catch(() => null);
-                    setVideoToast('Video updated');
+                    setVideoToast({ message: 'Video updated', type: 'success' });
                   } else {
                     push(dbRef(db, 'trainingVideos'), videoData);
-                    setVideoToast('Video added');
+                    setVideoToast({ message: 'Video added', type: 'success' });
                   }
                   setTimeout(() => setVideoToast(null), 2000);
                   setShowVideoForm(false);
@@ -724,19 +724,42 @@ export default function AdminDashboard({ user }) {
       )}
 
       {/* VIDEO TOAST */}
-      {videoToast && (
-        <div style={{
-          position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',
-          zIndex:200000,display:'flex',alignItems:'center',gap:8,
-          padding:'10px 20px',borderRadius:12,
-          background:S.S,color:S.OnS,
-          border:'1px solid '+S.Out,
-          fontSize:13,fontWeight:700,
-          boxShadow:'0 8px 24px rgba(0,0,0,.4)',
-          animation:'mfade .2s ease',
-        }}>
-          <span className="material-symbols-outlined" style={{ fontSize:16,color:S.P }}>check_circle</span>
-          {videoToast}
+      {videoToast && !videoToast.centered && (
+        <div className={'admin-toast ' + (videoToast.type === 'error' ? 'admin-toast-error' : 'admin-toast-success')} role="alert" style={{ bottom: 24, right: 24 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: videoToast.type === 'error' ? '#E91E63' : '#4CAF50' }}>
+            {videoToast.type === 'error' ? 'error' : 'check_circle'}
+          </span>
+          {videoToast.message}
+        </div>
+      )}
+
+      {/* CENTERED VIDEO TOAST (for delete) */}
+      {videoToast && videoToast.centered && (
+        <div className="user-detail-overlay" onClick={() => setVideoToast(null)} style={{ backdropFilter: 'blur(4px)' }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: S.S, borderRadius: 20, padding: '32px 40px',
+            maxWidth: 400, width: '100%', textAlign: 'center',
+            boxShadow: '0 24px 64px rgba(0,0,0,.5)',
+            animation: 'mscale .3s ease',
+          }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: '50%',
+              background: 'rgba(76,175,80,.12)', margin: '0 auto 16px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 28, color: '#4CAF50' }}>check_circle</span>
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: S.OnS, marginBottom: 6 }}>{videoToast.message}</div>
+            <div style={{ fontSize: 13, color: S.OnSV, marginBottom: 20 }}>The video has been removed from training.</div>
+            <button onClick={() => setVideoToast(null)}
+              style={{
+                padding: '10px 32px', borderRadius: 100, border: 'none',
+                background: S.P, color: '#fff', cursor: 'pointer',
+                fontSize: 13, fontWeight: 800,
+              }}>
+              Got it
+            </button>
+          </div>
         </div>
       )}
 
