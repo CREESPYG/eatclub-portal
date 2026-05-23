@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../firebase';
 import { ref as dbRef, onValue, push, set, remove, update } from 'firebase/database';
 import { logNoticeAction } from '../services/noticeAudit';
@@ -29,18 +29,22 @@ export function useNotices(userEmail, uid, userName, userPhotoURL) {
   const [notices, setNotices] = useState([]);
   const [users, setUsers] = useState([]);
 
+  const noticesRef = useRef([]);
+  const usersRef = useRef([]);
+
   useEffect(() => {
     const unsubN = onValue(dbRef(db, 'notices'), (snap) => {
       const data = snap.val();
       if (data) {
         const list = Object.entries(data).map(([id, val]) => ({ id, ...val }));
         list.sort((a, b) => (b.pinnedBy && Object.keys(b.pinnedBy).length ? 1 : 0) - (a.pinnedBy && Object.keys(a.pinnedBy).length ? 1 : 0) || (b.createdAt || 0) - (a.createdAt || 0));
+        noticesRef.current = list;
         setNotices(list);
-      } else setNotices([]);
+      } else { noticesRef.current = []; setNotices([]); }
     });
     const unsubU = onValue(dbRef(db, 'users'), (snap) => {
       const data = snap.val();
-      if (data) setUsers(Object.entries(data).map(([id, val]) => ({ id, ...val })));
+      if (data) { const u = Object.entries(data).map(([id, val]) => ({ id, ...val })); usersRef.current = u; setUsers(u); }
     });
     return () => { unsubN(); unsubU(); };
   }, []);

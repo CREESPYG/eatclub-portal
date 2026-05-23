@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { db } from '../firebase';
-import { ref as dbRef, onValue, update } from 'firebase/database';
+import { ref as dbRef, onValue, update, set } from 'firebase/database';
 import NoticeBubble, { getDateSeparators } from '../components/NoticeBubble';
 
 const FILTERS = [
@@ -24,10 +24,15 @@ export default function NoticeBoard({ user }) {
   const handleAcknowledge = useCallback((notice) => {
     if (!uid) return;
     const nid = notice.id;
-    update(dbRef(db, `notices/${nid}/readBy/${uid}`), Date.now()).then(() => {
-      setAckAnim(nid);
-      setTimeout(() => setAckAnim(null), 400);
-    }).catch((err) => {
+    const now = Date.now();
+    setNotices(prev => prev.map(n =>
+      n.id === nid
+        ? { ...n, readBy: { ...(n.readBy || {}), [uid]: now } }
+        : n
+    ));
+    setAckAnim(nid);
+    setTimeout(() => setAckAnim(null), 400);
+    set(dbRef(db, `notices/${nid}/readBy/${uid}`), now).catch((err) => {
       console.error("Acknowledge failed:", err);
     });
   }, [uid]);

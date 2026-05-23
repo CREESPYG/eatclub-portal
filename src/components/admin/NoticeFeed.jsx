@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { db } from '../../firebase';
+import { ref as dbRef, onValue } from 'firebase/database';
 import NoticeBubble, { getDateSeparators } from '../NoticeBubble';
 import UserAvatar from '../UserAvatar';
 
@@ -8,11 +10,26 @@ const FILTERS = [
   { id: 'active', label: 'Active' },
 ];
 
-function NoticeReaders({ notice, users }) {
+function NoticeReaders({ noticeId, users }) {
   const [open, setOpen] = useState(false);
-  const readBy = notice.readBy || {};
-  const readCount = Object.keys(readBy).length;
-  const pct = users.length > 0 ? Math.round((readCount / users.length) * 100) : 0;
+  const [liveReadBy, setLiveReadBy] = useState({});
+  useEffect(() => {
+    if (!noticeId) return;
+    const ref = dbRef(db, `notices/${noticeId}/readBy`);
+    const unsub = onValue(ref, (snap) => {
+      const data = snap.val();
+      if (data) {
+        setLiveReadBy(data);
+      } else {
+        setLiveReadBy({});
+      }
+    }, (err) => {
+      console.error("NoticeReaders FB error:", err);
+    });
+    return () => unsub();
+  }, [noticeId]);
+  const readCount = Object.keys(liveReadBy).length;
+  const pct = users.length > 0 ? Math.round((readCount / users.length) * 100) : (readCount > 0 ? 100 : 0);
 
   return (
     <div className="notice-read-count">
@@ -21,7 +38,7 @@ function NoticeReaders({ notice, users }) {
           <div className="notice-read-bar-fill" style={{ width: `${pct}%` }} />
         </div>
         <span className="notice-read-label">
-          {readCount}/{users.length} read
+          {users.length > 0 ? `${readCount}/${users.length} read` : `${readCount} acknowledged`}
           <span className="material-symbols-outlined" style={{ fontSize: 11, marginLeft: 4, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>expand_more</span>
         </span>
       </div>
@@ -32,7 +49,7 @@ function NoticeReaders({ notice, users }) {
           ) : (
             users.map((u) => {
               const uid = u.id || u.uid;
-              const hasRead = uid && readBy[uid];
+              const hasRead = uid && liveReadBy[uid];
               return (
                 <div key={uid} className={`notice-reader-item ${hasRead ? 'has-read' : ''}`}>
                   <UserAvatar
@@ -115,7 +132,7 @@ export default function NoticeFeed({
                 onDelete={onDelete}
                 onPin={onPin}
               />
-              <NoticeReaders notice={notice} users={users} />
+              <NoticeReaders noticeId={notice.id} users={users} />
             </div>
           ))}
         </div>
