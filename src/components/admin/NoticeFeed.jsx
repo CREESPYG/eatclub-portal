@@ -6,7 +6,6 @@ const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'pinned', label: 'Pinned' },
   { id: 'active', label: 'Active' },
-  { id: 'inactive', label: 'Archived' },
 ];
 
 function NoticeReaders({ notice, users }) {
@@ -65,7 +64,6 @@ export default function NoticeFeed({
   onEdit,
   onDelete,
   onPin,
-  onArchive,
   getReadCount,
 }) {
   const seps = getDateSeparators(notices);
@@ -76,7 +74,7 @@ export default function NoticeFeed({
     if (f.id === 'all') counts[f.id] = notices.length;
     else if (f.id === 'pinned') counts[f.id] = notices.filter((n) => n.pinnedBy && Object.keys(n.pinnedBy).length > 0 && n.active !== false).length;
     else if (f.id === 'active') counts[f.id] = notices.filter((n) => (!n.pinnedBy || Object.keys(n.pinnedBy).length === 0) && n.active !== false).length;
-    else if (f.id === 'inactive') counts[f.id] = notices.filter((n) => n.active === false).length;
+    else if (f.id === 'inactive') counts[f.id] = 0;
   });
 
   return (
@@ -116,7 +114,6 @@ export default function NoticeFeed({
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onPin={onPin}
-                onArchive={onArchive}
               />
               <NoticeReaders notice={notice} users={users} />
             </div>

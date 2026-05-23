@@ -20,7 +20,7 @@ export default function NoticeBoard({ user }) {
 
   const {
     notices, users,
-    saveNotice, togglePin, toggleArchive, deleteNotice, getReadCount, filtered,
+    saveNotice, togglePin, deleteNotice, getReadCount, filtered,
   } = useNotices(userEmail, uid, userName, userPhotoURL);
 
   const showToast = useCallback((msg, type) => {
@@ -90,7 +90,6 @@ export default function NoticeBoard({ user }) {
         onEdit={openEditor}
         onDelete={deleteNotice}
         onPin={togglePin}
-        onArchive={toggleArchive}
         getReadCount={getReadCount}
       />
 

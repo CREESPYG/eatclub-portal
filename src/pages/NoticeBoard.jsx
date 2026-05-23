@@ -20,6 +20,18 @@ export default function NoticeBoard({ user }) {
 
   const uid = user?.uid || localStorage.getItem('eatclub_uid');
 
+  const [ackAnim, setAckAnim] = useState(null);
+  const handleAcknowledge = useCallback((notice) => {
+    if (!uid) return;
+    const nid = notice.id;
+    update(dbRef(db, `notices/${nid}/readBy/${uid}`), Date.now()).then(() => {
+      setAckAnim(nid);
+      setTimeout(() => setAckAnim(null), 400);
+    }).catch((err) => {
+      console.error("Acknowledge failed:", err);
+    });
+  }, [uid]);
+
   useEffect(() => {
     const r = dbRef(db, 'notices');
     const unsub = onValue(r, (snap) => {
@@ -29,12 +41,6 @@ export default function NoticeBoard({ user }) {
           .map(([id, val]) => ({ id, ...val }))
           .sort((a, b) => ((b.pinnedBy && b.pinnedBy[uid]) ? 1 : 0) - ((a.pinnedBy && a.pinnedBy[uid]) ? 1 : 0) || (b.createdAt || 0) - (a.createdAt || 0));
         setNotices(list);
-
-        list.forEach((n) => {
-          if (n.active !== false && uid && (!n.readBy || !n.readBy[uid])) {
-            update(dbRef(db, `notices/${n.id}/readBy/${uid}`), Date.now()).catch(() => {});
-          }
-        });
       } else {
         setNotices([]);
       }
@@ -229,6 +235,14 @@ export default function NoticeBoard({ user }) {
         .nb-empty-chat p { font-size: 14px; font-weight: 700; margin: 0 0 4px; }
         .nb-empty-chat span { font-size: 11px; opacity: 0.6; }
 
+        .notice-ack-btn.anim-ack {
+          animation: ackPop 0.4s ease;
+        }
+        @keyframes ackPop {
+          0% { transform: scale(1); background: rgba(76,175,80,0); }
+          50% { transform: scale(1.15); background: rgba(76,175,80,0.2); }
+          100% { transform: scale(1); background: rgba(76,175,80,0); }
+        }
         @media (max-width: 768px) {
           .nb-chat-page { flex: 1; min-height: 0; height: auto; max-height: none; }
           .nb-chat-header { padding: 12px 16px; }
@@ -303,6 +317,8 @@ export default function NoticeBoard({ user }) {
                 isAdmin={false}
                 currentUserId={uid}
                 onPin={handlePin}
+                onAcknowledge={handleAcknowledge}
+                ackAnim={ackAnim}
               />
             </div>
           ))}

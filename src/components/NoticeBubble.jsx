@@ -68,7 +68,8 @@ export default function NoticeBubble({
   onEdit,
   onDelete,
   onPin,
-  onArchive,
+  onAcknowledge,
+  ackAnim,
 }) {
   const {
     title,
@@ -154,9 +155,21 @@ export default function NoticeBubble({
               </span>
             </button>
           )}
-          {!isAdmin && (
-            <span className={`notice-read-status ${isRead ? 'read' : 'unread'}`}>
-              {isRead ? '\u2713\u2713' : '\u2713'}
+          {!isAdmin && onAcknowledge && !isRead && (
+            <button
+              type="button"
+              className={`notice-action-btn notice-ack-btn${ackAnim === notice.id ? ' anim-ack' : ''}`}
+              onClick={(e) => { e.stopPropagation(); onAcknowledge(notice); }}
+              title="Acknowledge this notice"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>check_circle</span>
+              <span style={{ fontSize: 9, fontWeight: 800 }}>ACK</span>
+            </button>
+          )}
+          {!isAdmin && isRead && (
+            <span className={`notice-read-status read`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 12, color: '#4CAF50' }}>check_circle</span>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#4CAF50' }}>Read</span>
             </span>
           )}
         </div>
@@ -171,18 +184,6 @@ export default function NoticeBubble({
                 title="Edit notice"
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit</span>
-              </button>
-            )}
-            {onArchive && (
-              <button
-                type="button"
-                className="notice-action-btn"
-                onClick={(e) => { e.stopPropagation(); onArchive(notice); }}
-                title={notice.active === false ? 'Restore' : 'Archive'}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
-                  {notice.active === false ? 'unarchive' : 'archive'}
-                </span>
               </button>
             )}
             {onDelete && (
