@@ -14,9 +14,29 @@ function extractGoogleFileId(url) {
 }
 
 function getEmbedUrl(url) {
-  const fileId = extractGoogleFileId(url);
-  if (fileId) return `https://drive.google.com/file/d/${fileId}/preview`;
-  return url;
+  if (!url) return '';
+  const t = url.trim();
+  // Google Drive
+  const gd = extractGoogleFileId(t);
+  if (gd) return `https://drive.google.com/file/d/${gd}/preview`;
+  if (t.includes('/view')) return t.replace('/view', '/preview');
+  // YouTube
+  const ytRegexps = [
+    t.match(/(?:youtube\.com|youtu\.be)\/shorts\/([a-zA-Z0-9_-]{11})/),
+    t.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/),
+    t.match(/(?:youtube\.com)\/embed\/([a-zA-Z0-9_-]{11})/),
+    t.match(/(?:youtube\.com)\/watch\?v=([a-zA-Z0-9_-]{11})/),
+    t.match(/(?:youtube\.com)\/watch\/([a-zA-Z0-9_-]{11})/),
+  ];
+  for (const m of ytRegexps) {
+    if (m) return `https://www.youtube.com/embed/${m[1]}`;
+  }
+  // Vimeo
+  const vm = t.match(/vimeo\.com\/(\d+)/);
+  if (vm) return `https://player.vimeo.com/video/${vm[1]}`;
+  // Direct video files
+  if (t.match(/\.(mp4|webm|ogg|mov)($|\?)/i)) return t;
+  return t;
 }
 
 function stripHtml(html) {
@@ -545,18 +565,29 @@ export default function AdminDashboard({ user }) {
                     onFocus={e => { e.currentTarget.style.borderColor = S.P; e.currentTarget.style.boxShadow = `0 0 0 2px rgba(var(--md-primary-rgb),.1)` }}
                     onBlur={e => { e.currentTarget.style.borderColor = S.Out; e.currentTarget.style.boxShadow = 'none' }} />
                 </div>
-                {videoForm.url && extractGoogleFileId(videoForm.url) && (
-                  <div style={{ padding:'10px 14px',borderRadius:10,background:'rgba(76,175,80,.06)',border:'1px solid rgba(76,175,80,.2)',fontSize:11,color:'#4CAF50',fontWeight:700,display:'flex',alignItems:'center',gap:8 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize:16 }}>check_circle</span>
-                    Valid Google Drive link detected
-                  </div>
-                )}
-                {videoForm.url && !extractGoogleFileId(videoForm.url) && videoForm.url.length > 5 && (
-                  <div style={{ padding:'10px 14px',borderRadius:10,background:'rgba(255,152,0,.06)',border:'1px solid rgba(255,152,0,.2)',fontSize:11,color:'#FF9800',fontWeight:700,display:'flex',alignItems:'center',gap:8 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize:16 }}>warning</span>
-                    Not a Google Drive link. Make sure it's a valid video URL.
-                  </div>
-                )}
+                {(() => {
+                  if (!videoForm.url || videoForm.url.length < 5) return null;
+                  const u = videoForm.url;
+                  const isGd = !!extractGoogleFileId(u);
+                  const isYt = /(youtube\.com|youtu\.be)/.test(u);
+                  const isVm = /vimeo\.com/.test(u);
+                  const isDirect = /\.(mp4|webm|ogg|mov)($|\?)/i.test(u);
+                  if (isGd || isYt || isVm || isDirect) {
+                    const label = isGd ? 'Google Drive' : isYt ? 'YouTube' : isVm ? 'Vimeo' : 'Direct video';
+                    return (
+                      <div style={{ padding:'10px 14px',borderRadius:10,background:'rgba(76,175,80,.06)',border:'1px solid rgba(76,175,80,.2)',fontSize:11,color:'#4CAF50',fontWeight:700,display:'flex',alignItems:'center',gap:8 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize:16 }}>check_circle</span>
+                        {label} link detected — will play inline
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ padding:'10px 14px',borderRadius:10,background:'rgba(255,152,0,.06)',border:'1px solid rgba(255,152,0,.2)',fontSize:11,color:'#FF9800',fontWeight:700,display:'flex',alignItems:'center',gap:8 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize:16 }}>warning</span>
+                      Unrecognized URL format. Supported: Google Drive, YouTube, Vimeo, direct .mp4/.webm/.ogg/.mov
+                    </div>
+                  );
+                })()}
               </div>
               <div style={{ display:'flex',gap:10,marginTop:20 }}>
                 <button onClick={() => setShowVideoForm(false)}

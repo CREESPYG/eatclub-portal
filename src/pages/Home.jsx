@@ -4,9 +4,28 @@ import { ref as dbRef, onValue } from 'firebase/database';
 
 function getEmbedUrl(url) {
   if (!url) return '';
-  const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if (match) return `https://drive.google.com/file/d/${match[1]}/preview`;
-  return url.replace('/view', '/preview');
+  const t = url.trim();
+  // Google Drive
+  const gd = t.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (gd) return `https://drive.google.com/file/d/${gd[1]}/preview`;
+  if (t.includes('/view')) return t.replace('/view', '/preview');
+  // YouTube
+  const ytRegexps = [
+    t.match(/(?:youtube\.com|youtu\.be)\/shorts\/([a-zA-Z0-9_-]{11})/),
+    t.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/),
+    t.match(/(?:youtube\.com)\/embed\/([a-zA-Z0-9_-]{11})/),
+    t.match(/(?:youtube\.com)\/watch\?v=([a-zA-Z0-9_-]{11})/),
+    t.match(/(?:youtube\.com)\/watch\/([a-zA-Z0-9_-]{11})/),
+  ];
+  for (const m of ytRegexps) {
+    if (m) return `https://www.youtube.com/embed/${m[1]}`;
+  }
+  // Vimeo
+  const vm = t.match(/vimeo\.com\/(\d+)/);
+  if (vm) return `https://player.vimeo.com/video/${vm[1]}`;
+  // Direct video files
+  if (t.match(/\.(mp4|webm|ogg|mov)($|\?)/i)) return t;
+  return t;
 }
 
 const S = {
