@@ -7,6 +7,18 @@ import UserAvatar from '../../components/UserAvatar';
 import ActivityLog, { useAdminLog } from '../../components/admin/ActivityLog';
 import { isMainAdmin } from '../../config/roles';
 
+function extractGoogleFileId(url) {
+  if (!url) return null;
+  const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
+function getEmbedUrl(url) {
+  const fileId = extractGoogleFileId(url);
+  if (fileId) return `https://drive.google.com/file/d/${fileId}/preview`;
+  return url;
+}
+
 function stripHtml(html) {
   if (!html) return '';
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -50,8 +62,8 @@ const TABS = [
   { id: 'analytics', icon: 'analytics', label: 'Analytics' },
   { id: 'notes', icon: 'note_alt', label: 'All Notes' },
   { id: 'notices', icon: 'campaign', label: 'Notices' },
+  { id: 'videos', icon: 'play_circle', label: 'Training Videos' },
   { id: 'activity', icon: 'history', label: 'Activity Log' },
-
 ];
 
 export default function AdminDashboard({ user }) {
@@ -63,6 +75,12 @@ export default function AdminDashboard({ user }) {
   const [noteDialog, setNoteDialog] = useState(null);
   const [noteSearch, setNoteSearch] = useState('');
   const [allNotes, setAllNotes] = useState({});
+  const [videos, setVideos] = useState([]);
+  const [videoForm, setVideoForm] = useState({ title: '', duration: '', url: '' });
+  const [editingVideoId, setEditingVideoId] = useState(null);
+  const [showVideoForm, setShowVideoForm] = useState(false);
+  const [videoToast, setVideoToast] = useState(null);
+  const [previewVideo, setPreviewVideo] = useState(null);
 
   const userEmail = user?.email || localStorage.getItem('eatclub_agent_email') || '';
   const uid = user?.uid || localStorage.getItem('eatclub_uid');
@@ -105,7 +123,19 @@ export default function AdminDashboard({ user }) {
       if (data) setAllNotes(data);
     });
 
-    return () => { unsubUsers(); unsubLB(); unsubPresence(); unsubNotes(); };
+    const videosRef = dbRef(db, 'trainingVideos');
+    const unsubVideos = onValue(videosRef, snap => {
+      const data = snap.val();
+      if (data) {
+        const list = Object.entries(data).map(([id, val]) => ({ id, ...val }));
+        list.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+        setVideos(list);
+      } else {
+        setVideos([]);
+      }
+    });
+
+    return () => { unsubUsers(); unsubLB(); unsubPresence(); unsubNotes(); unsubVideos(); };
   }, []);
 
   const onlineCount = presenceData.filter(p => p.status === 'online').length;
@@ -376,6 +406,229 @@ export default function AdminDashboard({ user }) {
         <NoticeBoard user={user} />
       )}
 
+      {/* TRAINING VIDEOS */}
+      {activeTab === 'videos' && (
+        <div>
+          <div className="admin-card">
+            <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12 }}>
+              <div style={{ display:'flex',alignItems:'center',gap:10 }}>
+                <span className="material-symbols-outlined" style={{ color:S.P,fontSize:22 }}>play_circle</span>
+                <div>
+                  <div style={{ fontSize:15,fontWeight:800,color:S.OnS }}>Training Videos</div>
+                  <div style={{ fontSize:11,color:S.OnSV,marginTop:1 }}>{videos.length} video{videos.length!==1?'s':''} · Manage training video links shown on Home</div>
+                </div>
+              </div>
+              <button onClick={() => { setVideoForm({ title:'',duration:'',url:'' }); setEditingVideoId(null); setShowVideoForm(true) }}
+                className="admin-tab" style={{ padding:'8px 18px',background:S.P,color:'#fff',border:'none' }}>
+                <span className="material-symbols-outlined" style={{ fontSize:14 }}>add</span>
+                Add Video
+              </button>
+            </div>
+          </div>
+
+          {/* Video List */}
+          <div className="admin-card" style={{ padding:0,overflow:'hidden' }}>
+            {videos.length === 0 ? (
+              <div style={{ textAlign:'center',padding:'60px 20px',color:S.OnSV }}>
+                <span className="material-symbols-outlined" style={{ fontSize:48,opacity:.2,marginBottom:12 }}>videocam</span>
+                <div style={{ fontSize:16,fontWeight:700,color:S.OnS }}>No training videos yet</div>
+                <div style={{ fontSize:12,marginTop:4,opacity:.6 }}>Click "Add Video" to add training video links for agents</div>
+              </div>
+            ) : (
+              <div style={{ display:'flex',flexDirection:'column' }}>
+                {videos.map((v, idx) => (
+                  <div key={v.id} style={{
+                    display:'flex',alignItems:'center',gap:14,padding:'14px 20px',
+                    borderTop: idx > 0 ? `1px solid ${S.Out}` : 'none',
+                    transition:'background .15s',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.background = `rgba(var(--md-primary-rgb),.03)`}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <div style={{
+                      width:40,height:40,borderRadius:10,
+                      background:'rgba(var(--md-primary-rgb),.08)',
+                      display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
+                    }}>
+                      <span className="material-symbols-outlined" style={{ color:S.P,fontSize:20 }}>play_circle</span>
+                    </div>
+                    <div style={{ flex:1,minWidth:0 }}>
+                      <div style={{ fontSize:13,fontWeight:800,color:S.OnS }}>{v.title}</div>
+                      <div style={{ display:'flex',alignItems:'center',gap:8,marginTop:2 }}>
+                        {v.duration && (
+                          <span style={{ fontSize:10,color:S.OnSV,display:'flex',alignItems:'center',gap:3 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize:12 }}>schedule</span>
+                            {v.duration}
+                          </span>
+                        )}
+                        <span style={{ fontSize:10,color:S.OnSV,opacity:.6 }}>·</span>
+                        <span style={{ fontSize:10,color:S.OnSV,display:'flex',alignItems:'center',gap:3 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize:12 }}>link</span>
+                          {v.url ? v.url.substring(0,40) + '...' : 'No URL'}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ display:'flex',gap:6,flexShrink:0 }}>
+                      <button onClick={() => { setPreviewVideo(v) }}
+                        style={{ width:32,height:32,borderRadius:8,border:'1px solid '+S.Out,background:S.SV,color:S.OnS,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = S.P; e.currentTarget.style.color = S.P }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = S.Out; e.currentTarget.style.color = S.OnS }}
+                        title="Preview video">
+                        <span className="material-symbols-outlined" style={{ fontSize:16 }}>visibility</span>
+                      </button>
+                      <button onClick={() => { setVideoForm({ title:v.title,duration:v.duration,url:v.url }); setEditingVideoId(v.id); setShowVideoForm(true) }}
+                        style={{ width:32,height:32,borderRadius:8,border:'1px solid '+S.Out,background:S.SV,color:S.OnS,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = S.P; e.currentTarget.style.color = S.P }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = S.Out; e.currentTarget.style.color = S.OnS }}
+                        title="Edit video">
+                        <span className="material-symbols-outlined" style={{ fontSize:16 }}>edit</span>
+                      </button>
+                      <button onClick={() => {
+                        if (!confirm('Delete "'+v.title+'"?')) return;
+                        remove(dbRef(db, 'trainingVideos/' + v.id)).catch(() => null);
+                        setVideoToast('Video deleted');
+                        setTimeout(() => setVideoToast(null), 2000);
+                      }}
+                        style={{ width:32,height:32,borderRadius:8,border:'1px solid rgba(233,30,99,.2)',background:'rgba(233,30,99,.06)',color:'#E91E63',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(233,30,99,.12)' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(233,30,99,.06)' }}
+                        title="Delete video">
+                        <span className="material-symbols-outlined" style={{ fontSize:16 }}>delete</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* VIDEO FORM MODAL */}
+      {showVideoForm && (
+        <div className="user-detail-overlay" onClick={() => setShowVideoForm(false)} style={{ backdropFilter:'blur(4px)' }}>
+          <div className="user-detail-modal" onClick={e => e.stopPropagation()} style={{ maxWidth:480,overflow:'hidden',borderRadius:20 }}>
+            <div style={{ padding:'20px 24px',background:'linear-gradient(135deg,'+S.P+',rgba(var(--md-primary-rgb),.85))',color:'#fff' }}>
+              <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between' }}>
+                <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize:20 }}>{editingVideoId ? 'edit' : 'add_circle'}</span>
+                  <span style={{ fontSize:16,fontWeight:900 }}>{editingVideoId ? 'Edit Video' : 'Add New Video'}</span>
+                </div>
+                <button onClick={() => setShowVideoForm(false)}
+                  style={{ width:28,height:28,borderRadius:'50%',border:'none',background:'rgba(255,255,255,.15)',color:'#fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize:16 }}>close</span>
+                </button>
+              </div>
+            </div>
+            <div style={{ padding:'20px 24px',background:S.S }}>
+              <div style={{ display:'flex',flexDirection:'column',gap:14 }}>
+                <div>
+                  <label style={{ fontSize:11,fontWeight:700,color:S.OnSV,display:'block',marginBottom:4 }}>Video Title *</label>
+                  <input value={videoForm.title} onChange={e => setVideoForm(p => ({...p,title:e.target.value}))}
+                    placeholder="e.g. Training Part-1"
+                    style={{ width:'100%',padding:'10px 14px',borderRadius:10,border:'1px solid '+S.Out,background:S.SV,color:S.OnS,fontSize:13,fontWeight:600,outline:'none' }}
+                    onFocus={e => { e.currentTarget.style.borderColor = S.P; e.currentTarget.style.boxShadow = `0 0 0 2px rgba(var(--md-primary-rgb),.1)` }}
+                    onBlur={e => { e.currentTarget.style.borderColor = S.Out; e.currentTarget.style.boxShadow = 'none' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize:11,fontWeight:700,color:S.OnSV,display:'block',marginBottom:4 }}>Duration</label>
+                  <input value={videoForm.duration} onChange={e => setVideoForm(p => ({...p,duration:e.target.value}))}
+                    placeholder="e.g. 1:04:02"
+                    style={{ width:'100%',padding:'10px 14px',borderRadius:10,border:'1px solid '+S.Out,background:S.SV,color:S.OnS,fontSize:13,fontWeight:600,outline:'none' }}
+                    onFocus={e => { e.currentTarget.style.borderColor = S.P; e.currentTarget.style.boxShadow = `0 0 0 2px rgba(var(--md-primary-rgb),.1)` }}
+                    onBlur={e => { e.currentTarget.style.borderColor = S.Out; e.currentTarget.style.boxShadow = 'none' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize:11,fontWeight:700,color:S.OnSV,display:'block',marginBottom:4 }}>Google Drive URL *</label>
+                  <input value={videoForm.url} onChange={e => setVideoForm(p => ({...p,url:e.target.value}))}
+                    placeholder="https://drive.google.com/file/d/..."
+                    style={{ width:'100%',padding:'10px 14px',borderRadius:10,border:'1px solid '+S.Out,background:S.SV,color:S.OnS,fontSize:13,fontWeight:600,outline:'none' }}
+                    onFocus={e => { e.currentTarget.style.borderColor = S.P; e.currentTarget.style.boxShadow = `0 0 0 2px rgba(var(--md-primary-rgb),.1)` }}
+                    onBlur={e => { e.currentTarget.style.borderColor = S.Out; e.currentTarget.style.boxShadow = 'none' }} />
+                </div>
+                {videoForm.url && extractGoogleFileId(videoForm.url) && (
+                  <div style={{ padding:'10px 14px',borderRadius:10,background:'rgba(76,175,80,.06)',border:'1px solid rgba(76,175,80,.2)',fontSize:11,color:'#4CAF50',fontWeight:700,display:'flex',alignItems:'center',gap:8 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize:16 }}>check_circle</span>
+                    Valid Google Drive link detected
+                  </div>
+                )}
+                {videoForm.url && !extractGoogleFileId(videoForm.url) && videoForm.url.length > 5 && (
+                  <div style={{ padding:'10px 14px',borderRadius:10,background:'rgba(255,152,0,.06)',border:'1px solid rgba(255,152,0,.2)',fontSize:11,color:'#FF9800',fontWeight:700,display:'flex',alignItems:'center',gap:8 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize:16 }}>warning</span>
+                    Not a Google Drive link. Make sure it's a valid video URL.
+                  </div>
+                )}
+              </div>
+              <div style={{ display:'flex',gap:10,marginTop:20 }}>
+                <button onClick={() => setShowVideoForm(false)}
+                  style={{ flex:1,padding:'10px 16px',borderRadius:10,border:'1px solid '+S.Out,background:S.SV,color:S.OnS,cursor:'pointer',fontSize:12,fontWeight:700 }}>
+                  Cancel
+                </button>
+                <button onClick={() => {
+                  if (!videoForm.title.trim() || !videoForm.url.trim()) {
+                    setVideoToast('Title and URL are required');
+                    setTimeout(() => setVideoToast(null), 2000);
+                    return;
+                  }
+                  const videoData = {
+                    title: videoForm.title.trim(),
+                    duration: videoForm.duration.trim(),
+                    url: videoForm.url.trim(),
+                    addedAt: Date.now(),
+                    addedBy: userEmail,
+                  };
+                  if (editingVideoId) {
+                    update(dbRef(db, 'trainingVideos/' + editingVideoId), videoData).catch(() => null);
+                    setVideoToast('Video updated');
+                  } else {
+                    push(dbRef(db, 'trainingVideos'), videoData);
+                    setVideoToast('Video added');
+                  }
+                  setTimeout(() => setVideoToast(null), 2000);
+                  setShowVideoForm(false);
+                  setEditingVideoId(null);
+                }}
+                  style={{ flex:1,padding:'10px 16px',borderRadius:10,border:'none',background:S.P,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:800,
+                    opacity: (!videoForm.title.trim() || !videoForm.url.trim()) ? .6 : 1 }}>
+                  {editingVideoId ? 'Update Video' : 'Add Video'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIDEO PREVIEW MODAL */}
+      {previewVideo && (
+        <div className="user-detail-overlay" onClick={() => setPreviewVideo(null)} style={{ backdropFilter:'blur(4px)' }}>
+          <div className="user-detail-modal" onClick={e => e.stopPropagation()} style={{ maxWidth:840,overflow:'hidden',borderRadius:20 }}>
+            <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 20px',borderBottom:'1px solid '+S.Out }}>
+              <div style={{ display:'flex',alignItems:'center',gap:10 }}>
+                <span className="material-symbols-outlined" style={{ color:S.P,fontSize:20 }}>play_circle</span>
+                <span style={{ fontSize:15,fontWeight:700,color:S.OnS }}>{previewVideo.title}</span>
+                {previewVideo.duration && (
+                  <span style={{ fontSize:11,color:S.OnSV,fontWeight:600,padding:'2px 10px',borderRadius:6,background:S.SV }}>
+                    {previewVideo.duration}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => setPreviewVideo(null)}
+                style={{ width:28,height:28,borderRadius:'50%',border:'none',background:S.SV,color:S.OnS,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>
+                <span className="material-symbols-outlined" style={{ fontSize:16 }}>close</span>
+              </button>
+            </div>
+            <div style={{ position:'relative',width:'100%',paddingTop:'56.25%',background:'#000' }}>
+              <iframe src={getEmbedUrl(previewVideo.url)} style={{ position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none' }} allow="autoplay; fullscreen" title={previewVideo.title} />
+            </div>
+            <div style={{ padding:'14px 20px',display:'flex',justifyContent:'flex-end' }}>
+              <button onClick={() => setPreviewVideo(null)}
+                style={{ padding:'8px 20px',borderRadius:8,border:'none',background:S.P,color:'#fff',cursor:'pointer',fontSize:11,fontWeight:800 }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ACTIVITY LOG */}
       {activeTab === 'activity' && isMainAdmin(userEmail) && (
         <ActivityLog user={user} />
@@ -424,6 +677,23 @@ export default function AdminDashboard({ user }) {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* VIDEO TOAST */}
+      {videoToast && (
+        <div style={{
+          position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',
+          zIndex:200000,display:'flex',alignItems:'center',gap:8,
+          padding:'10px 20px',borderRadius:12,
+          background:S.S,color:S.OnS,
+          border:'1px solid '+S.Out,
+          fontSize:13,fontWeight:700,
+          boxShadow:'0 8px 24px rgba(0,0,0,.4)',
+          animation:'mfade .2s ease',
+        }}>
+          <span className="material-symbols-outlined" style={{ fontSize:16,color:S.P }}>check_circle</span>
+          {videoToast}
         </div>
       )}
 

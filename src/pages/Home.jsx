@@ -1,4 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
+import { db } from '../firebase';
+import { ref as dbRef, onValue } from 'firebase/database';
+
+function getEmbedUrl(url) {
+  if (!url) return '';
+  const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (match) return `https://drive.google.com/file/d/${match[1]}/preview`;
+  return url.replace('/view', '/preview');
+}
 
 const S = {
   P: 'var(--md-primary)',
@@ -46,6 +55,22 @@ export default function Home({ navigate }) {
   const [hoveredMod, setHoveredMod] = useState(null);
   const [hoveredBrand, setHoveredBrand] = useState(null);
   const [copiedNumber, setCopiedNumber] = useState(null);
+  const [videos, setVideos] = useState([]);
+
+  useEffect(() => {
+    const videosRef = dbRef(db, 'trainingVideos');
+    const unsub = onValue(videosRef, (snap) => {
+      const data = snap.val();
+      if (data) {
+        const list = Object.entries(data).map(([id, val]) => ({ id, ...val }));
+        list.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+        setVideos(list);
+      } else {
+        setVideos([]);
+      }
+    });
+    return () => unsub();
+  }, []);
   const kmlEmbedUrl = 'https://www.google.com/maps/d/u/0/embed?mid=1wiwuWSDsbn7foslXUgtO8E_c8tG-S9g';
   const kmlEditUrl = 'https://www.google.com/maps/d/u/0/edit?mid=1wiwuWSDsbn7foslXUgtO8E_c8tG-S9g&ll=18.450172775417553%2C69.88048389003016&z=6';
   const feedEmbedUrl = 'https://docs.google.com/presentation/d/1wAToMjia1zZkeqPa6_fhoeL2Pl4O62WEcqdNzXS6nQA/embed?start=true&loop=true&delayms=5000&rm=minimal';
@@ -131,13 +156,6 @@ export default function Home({ navigate }) {
   const phonesOut = [
     { label: 'CC \u2192 Outlet',            number: '08061930323', icon: 'call_made' },
     { label: 'Zomato CC \u2192 EC CC (Wefit)', number: '8046161960', icon: 'call_made' },
-  ];
-
-  const videos = [
-    { title: 'Training Part-1', duration: '1:04:02', url: 'https://drive.google.com/file/d/1awvlsKQI2RS2lFuSUbLlHlble3DpiG2C/view' },
-    { title: 'Training Part-2', duration: '0:22:48', url: 'https://drive.google.com/file/d/1vm8dwKzKPgyzLOA6vTqY9cbLboPS01E8/view' },
-    { title: 'Training Part-3 (Day 2)', duration: '0:41:03', url: 'https://drive.google.com/file/d/1XpU3YTNR0IXfjaoCWTyDzQIOnFVBO2NU/view' },
-    { title: 'Training Part-4 (Day 2)', duration: '0:25:39', url: 'https://drive.google.com/file/d/1Gbi5tvpJ5r0dH35AnsDGXFsvDo7fLTbn/view' },
   ];
 
   const tabs = [
@@ -408,7 +426,7 @@ export default function Home({ navigate }) {
       {/* ═══════════════════════════════════════════════
           PHONES + VIDEOS
       ═══════════════════════════════════════════════ */}
-      <Section id="phones" icon="phone" title="Bridge Numbers & Training Videos" badge="11 numbers · 4 videos">
+      <Section id="phones" icon="phone" title="Bridge Numbers & Training Videos" badge={`11 numbers · ${videos.length} video${videos.length !== 1 ? 's' : ''}`}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
 
           {/* ── Phone Numbers ── */}
@@ -802,7 +820,7 @@ export default function Home({ navigate }) {
               </button>
             </div>
             <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#000' }}>
-              <iframe src={activeVideo.url.replace('/view', '/preview')} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }} allow="autoplay; fullscreen" title={activeVideo.title} />
+              <iframe src={getEmbedUrl(activeVideo.url)} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }} allow="autoplay; fullscreen" title={activeVideo.title} />
             </div>
             <div style={{ padding: '18px', textAlign: 'center' }}>
               <div style={{ marginBottom: 12, fontSize: 12, color: S.OnSV, lineHeight: 1.6 }}>Watch the entire training video, then verify your knowledge with a quiz mapping directly to its contents.</div>

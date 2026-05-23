@@ -80,6 +80,13 @@
     "noticeBoardConfig": {
       ".read": "auth.uid !== null",
       ".write": "auth.uid !== null && root.child('users').child(auth.uid).child('email').val() === 'pooja8.box8@gmail.com'"
+    },
+    "trainingVideos": {
+      ".read": "auth.uid !== null",
+      ".write": "auth.uid !== null && (root.child('users').child(auth.uid).child('isAdmin').val() === true || root.child('users').child(auth.uid).child('email').val() === 'pooja8.box8@gmail.com' || root.child('users').child(auth.uid).child('role').val() === 'Admin')",
+      "$videoId": {
+        ".validate": "newData.hasChildren(['title', 'url']) && newData.child('title').val().length > 0 && newData.child('url').val().length > 0"
+      }
     }
   }
 }
