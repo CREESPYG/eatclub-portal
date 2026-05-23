@@ -29,7 +29,8 @@ export default function UserAvatar({
   const avatar = resolveAvatar(
     storedAvatar,
     explicitPhotoURL || storedPhotoURL,
-    explicitName || storedName
+    explicitName || storedName,
+    !!explicitPhotoURL
   );
 
   const px = typeof size === 'number' ? size : (SIZES[size] || 36);

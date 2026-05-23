@@ -80,7 +80,10 @@ export function getUserColor(name) {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export function resolveAvatar(avatar, photoURL, name) {
+export function resolveAvatar(avatar, photoURL, name, preferImage) {
+  if (preferImage && photoURL) {
+    return { mode: 'image', value: photoURL, bg: undefined };
+  }
   if (avatar?.type === 'emoji') {
     return { mode: 'emoji', value: avatar.value, bg: avatar.bg || AVATAR_GRADIENTS[0] };
   }
