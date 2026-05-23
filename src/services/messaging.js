@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { ref as dbRef, push, set, onValue, off, update, remove, serverTimestamp, orderByChild, limitToLast, query } from 'firebase/database';
+import { ref as dbRef, push, set, onValue, off, update, remove, get, serverTimestamp, orderByChild, limitToLast, query } from 'firebase/database';
 
 // ─────────── HELPERS ───────────
 
@@ -61,24 +61,21 @@ export function listenTeamChat(onMessages, onError) {
 
 export function ensureConversation(convId, myData, otherData) {
   const metaRef = dbRef(db, `conversations/${convId}/metadata`);
-  return new Promise(resolve => {
-    onValue(metaRef, snap => {
-      off(metaRef, 'value');
-      if (snap.exists()) return resolve(snap.val());
-      const meta = {
-        participants: {
-          [myData.id]: { name: myData.name, role: myData.role || '', photoURL: myData.photoURL || '' },
-          [otherData.id]: { name: otherData.name, role: otherData.role || '', photoURL: otherData.photoURL || '' },
-        },
-        lastMessage: '',
-        lastSender: '',
-        lastActivity: now(),
-        createdAt: now(),
-        unreadCounts: { [myData.id]: 0, [otherData.id]: 0 },
-      };
-      set(metaRef, meta).then(() => resolve(meta)).catch(() => resolve(null));
-    }, { onlyOnce: true });
-  });
+  return get(metaRef).then(snap => {
+    if (snap.exists()) return snap.val();
+    const meta = {
+      participants: {
+        [myData.id]: { name: myData.name, role: myData.role || '', photoURL: myData.photoURL || '' },
+        [otherData.id]: { name: otherData.name, role: otherData.role || '', photoURL: otherData.photoURL || '' },
+      },
+      lastMessage: '',
+      lastSender: '',
+      lastActivity: now(),
+      createdAt: now(),
+      unreadCounts: { [myData.id]: 0, [otherData.id]: 0 },
+    };
+    return set(metaRef, meta).then(() => meta).catch(() => null);
+  }).catch(() => null);
 }
 
 export function sendDirectMessage({ convId, text, senderId, senderName }) {
@@ -96,14 +93,22 @@ export function sendDirectMessage({ convId, text, senderId, senderName }) {
   const msgRef = dbRef(db, `conversations/${convId}/messages`);
   const metaRef = dbRef(db, `conversations/${convId}/metadata`);
 
-  return push(msgRef, msg).then(() => {
-    update(metaRef, {
-      lastMessage: text.trim(),
-      lastSender: senderId,
-      lastActivity: timestamp,
-      [`unreadCounts/${senderId}`]: 0,
-    }).catch(() => null);
-    return msg;
+  return get(metaRef).then(metaSnap => {
+    const meta = metaSnap.val();
+    const otherId = meta ? Object.keys(meta.participants || {}).find(id => id !== senderId) : null;
+    const otherUnread = otherId ? (meta.unreadCounts?.[otherId] || 0) + 1 : 0;
+
+    return push(msgRef, msg).then(() => {
+      const metaUpdates = {
+        lastMessage: text.trim(),
+        lastSender: senderId,
+        lastActivity: timestamp,
+        [`unreadCounts/${senderId}`]: 0,
+      };
+      if (otherId) metaUpdates[`unreadCounts/${otherId}`] = otherUnread;
+      update(metaRef, metaUpdates).catch(() => null);
+      return msg;
+    });
   }).catch(err => {
     console.error('sendDirectMessage error:', err);
     throw err;
@@ -143,8 +148,7 @@ export function markConversationRead(convId, userId) {
   update(metaRef, { [`unreadCounts/${userId}`]: 0 }).catch(() => null);
 
   const msgRef = dbRef(db, `conversations/${convId}/messages`);
-  onValue(msgRef, snap => {
-    off(msgRef, 'value');
+  get(msgRef).then(snap => {
     const data = snap.val();
     if (!data) return;
     const updates = {};
@@ -155,9 +159,9 @@ export function markConversationRead(convId, userId) {
       }
     });
     if (Object.keys(updates).length > 0) {
-      update(ref, updates).catch(() => null);
+      update(msgRef, updates).catch(() => null);
     }
-  }, { onlyOnce: true });
+  }).catch(() => null);
 }
 
 // ─────────── TYPING INDICATORS ───────────

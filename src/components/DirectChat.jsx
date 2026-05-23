@@ -80,11 +80,24 @@ export default function DirectChat({ otherUser, myId, myName, myRole, myPhotoURL
     if (!text.trim() || sending) return;
     setSending(true);
     clearAllTyping(convId, myId);
+    const msgText = text.trim();
+    const optimisticMsg = {
+      fbId: 'opt_' + Date.now(),
+      text: msgText,
+      from: myId,
+      name: myName,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: Date.now(),
+      status: 'sent',
+      readBy: {},
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+    setText('');
     try {
-      await sendDirectMessage({ convId, text: text.trim(), senderId: myId, senderName: myName });
-      setText('');
+      await sendDirectMessage({ convId, text: msgText, senderId: myId, senderName: myName });
     } catch (err) {
       console.error('Send failed:', err);
+      setMessages(prev => prev.filter(m => m.fbId !== optimisticMsg.fbId));
     }
     setSending(false);
   }, [text, sending, convId, myId, myName]);
