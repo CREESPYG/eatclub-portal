@@ -521,8 +521,55 @@
 
 .notice-read-count {
   font-size: 10px; color: var(--md-on-surface-var);
-  padding: 2px 20px 8px; opacity: 0.6;
+  padding: 2px 20px 8px;
 }
+
+.notice-read-bar-wrapper {
+  display: flex; align-items: center; gap: 10px;
+  cursor: pointer; padding: 4px 0;
+  border-radius: 8px; transition: background 0.2s;
+}
+.notice-read-bar-wrapper:hover { background: var(--hover-state); }
+
+.notice-read-bar-track {
+  flex: 1; height: 4px; background: var(--md-surface-variant);
+  border-radius: 4px; overflow: hidden;
+}
+
+.notice-read-bar-fill {
+  height: 100%; background: linear-gradient(90deg, #4CAF50, #8BC34A);
+  border-radius: 4px; transition: width 0.3s ease;
+}
+
+.notice-read-label {
+  display: flex; align-items: center; gap: 2px;
+  white-space: nowrap; font-weight: 700; font-size: 10px;
+  color: var(--md-on-surface-var); flex-shrink: 0;
+}
+
+.notice-reader-list {
+  display: flex; flex-direction: column;
+  margin: 4px 0; padding: 6px 8px;
+  background: var(--md-surface-variant); border-radius: 10px;
+  max-height: 200px; overflow-y: auto; gap: 2px;
+}
+
+.notice-reader-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 500;
+}
+.notice-reader-item.has-read { color: var(--md-on-surface); }
+.notice-reader-item:not(.has-read) { opacity: 0.5; }
+
+.notice-reader-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.notice-reader-status {
+  font-size: 9px; font-weight: 800; padding: 1px 8px;
+  border-radius: 100px; flex-shrink: 0;
+}
+.notice-reader-status.read { background: rgba(76,175,80,0.15); color: #4CAF50; }
+.notice-reader-status.unread { background: rgba(158,158,158,0.15); color: var(--md-on-surface-var); }
 
 /* ─── Editor overlay & modal ─── */
 .nb-editor-overlay {

@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import NoticeBubble, { getDateSeparators } from '../NoticeBubble';
+import UserAvatar from '../UserAvatar';
 
 const FILTERS = [
   { id: 'all', label: 'All' },
@@ -6,6 +8,53 @@ const FILTERS = [
   { id: 'active', label: 'Active' },
   { id: 'inactive', label: 'Archived' },
 ];
+
+function NoticeReaders({ notice, users }) {
+  const [open, setOpen] = useState(false);
+  const readBy = notice.readBy || {};
+  const readCount = Object.keys(readBy).length;
+  const pct = users.length > 0 ? Math.round((readCount / users.length) * 100) : 0;
+
+  return (
+    <div className="notice-read-count">
+      <div className="notice-read-bar-wrapper" onClick={() => setOpen(!open)}>
+        <div className="notice-read-bar-track">
+          <div className="notice-read-bar-fill" style={{ width: `${pct}%` }} />
+        </div>
+        <span className="notice-read-label">
+          {readCount}/{users.length} read
+          <span className="material-symbols-outlined" style={{ fontSize: 11, marginLeft: 4, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>expand_more</span>
+        </span>
+      </div>
+      {open && (
+        <div className="notice-reader-list">
+          {users.length === 0 ? (
+            <div className="notice-reader-item">No users in system</div>
+          ) : (
+            users.map((u) => {
+              const uid = u.id || u.uid;
+              const hasRead = uid && readBy[uid];
+              return (
+                <div key={uid} className={`notice-reader-item ${hasRead ? 'has-read' : ''}`}>
+                  <UserAvatar
+                    size={16}
+                    name={u.name || u.displayName || u.email || '?'}
+                    photoURL={u.photoURL || u.photoUrl || ''}
+                    style={{ width: 16, height: 16, fontSize: 6 }}
+                  />
+                  <span className="notice-reader-name">{u.name || u.displayName || u.email || 'Unknown'}</span>
+                  <span className={`notice-reader-status ${hasRead ? 'read' : 'unread'}`}>
+                    {hasRead ? 'Read' : 'Unread'}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function NoticeFeed({
   notices,
@@ -69,9 +118,7 @@ export default function NoticeFeed({
                 onPin={onPin}
                 onArchive={onArchive}
               />
-              <div className="notice-read-count">
-                Read by {getReadCount(notice)}/{users.length} users
-              </div>
+              <NoticeReaders notice={notice} users={users} />
             </div>
           ))}
         </div>
